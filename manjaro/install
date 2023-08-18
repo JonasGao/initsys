@@ -1,0 +1,45 @@
+#!/bin/bash
+# 基础工具
+sudo pacman -Sy git
+sudo pacman -Sy vim
+sudo pacman -Sy make
+# 安装和准备 Docker
+sudo pacman -Sy docker
+sudo usermod -aG docker $USER
+sudo systemctl enable docker
+sudo systemctl restart docker
+curl -SLo set-mirror "https://jonasvlag.coding.net/p/Demo/d/share/git/raw/master/set-mirror?download=false"
+curl -SLo install-docker-compose "https://jonasvlag.coding.net/p/Demo/d/share/git/raw/master/ubuntu/install-docker-compose?download=false"
+sh set-mirror
+sh install-docker-compose
+# 初始化 vimrc
+curl -SLo vimrc "https://jonasvlag.coding.net/p/Demo/d/share/git/raw/master/vimrc?download=false"
+mv vimrc "$HOME/.vimrc"
+# 安装 yay
+export GO111MODULE=on
+export GOPROXY=https://goproxy.cn
+git clone https://aur.archlinux.org/yay-git.git
+sudo mv yay-git /opt/
+cd /opt/yay-git
+makepkg -si
+# 安装输入法
+sudo pacman -S ibus-rime
+# xprofile 配置暂时手动操作
+# 安装 kitty
+curl -L https://sw.kovidgoyal.net/kitty/installer.sh | sh /dev/stdin
+ln -s ~/.local/kitty.app/bin/kitty ~/.local/bin/
+cp ~/.local/kitty.app/share/applications/kitty.desktop ~/.local/share/applications/
+cp ~/.local/kitty.app/share/applications/kitty-open.desktop ~/.local/share/applications/
+sed -i "s|Icon=kitty|Icon=/home/$USER/.local/kitty.app/share/icons/hicolor/256x256/apps/kitty.png|g" ~/.local/share/applications/kitty*.desktop
+sed -i "s|Exec=kitty|Exec=/home/$USER/.local/kitty.app/bin/kitty|g" ~/.local/share/applications/kitty*.desktop
+# 安装浏览器等
+yay -S chrome
+yay -S microsoft-edge-stable-bin --noconfirm
+yay -S visual-studio-code-bin
+# 安装 zplug 和配置以及插件
+curl -sL --proto-redir -all,https https://raw.githubusercontent.com/zplug/installer/master/installer.zsh | zsh
+sudo pacman -S exa
+curl -SLo zshrc "https://jonasvlag.coding.net/p/xdemo/d/share/git/raw/master/manjaro/.zshrc"
+mv zshrc "$HOME/.zshrc"
+# 安装 SDKMAN
+curl -s "https://get.sdkman.io" | bash

@@ -1,0 +1,11 @@
+#!/bin/bash
+
+sudo dnf install gcc gcc-c++ kernel-devel libgcrypt-devel libxml2-devel openssl-devel gettext-devel cppunit
+
+sudo dnf install autoconf automake libtool
+
+sudo dnf install nettle-devel
+
+sudo dnf install python3-sphinx
+
+
