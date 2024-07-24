@@ -1,5 +1,8 @@
 #!/bin/bash
-sudo apt install git fzf fd-find bat-cat ripgrep openssh-server openssh-client python3-neovim
+sudo apt install git fzf fd-find bat-cat ripgrep openssh-server openssh-client
+sudo add-apt-repository ppa:neovim-ppa/stable -y
+sudo apt update
+sudo apt install neovim
 mkdir "$HOME/.config/"
 git clone https://github.com/JonasGao/nvimrc.git $HOME/.config/nvim
 printf """alias fd='fdfind'
