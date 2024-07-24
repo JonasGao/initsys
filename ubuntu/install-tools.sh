@@ -11,3 +11,7 @@ alias n='nvim'
 alias k='kubectl'
 alias h='helm'
 """ >"$HOME/.bash_aliases"
+printf """
+# Fzf for bash
+eval \"\$(fzf --bash)\"
+""">> "$HOME/.bashrc"
