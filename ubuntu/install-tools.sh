@@ -1,5 +1,5 @@
 #!/bin/bash
-sudo apt install git fzf fd-find bat-cat ripgrep openssh-server openssh-client
+sudo apt install git fzf fd-find bat ripgrep openssh-server openssh-client
 sudo add-apt-repository ppa:neovim-ppa/stable -y
 sudo apt update
 sudo apt install neovim
