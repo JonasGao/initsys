@@ -2,15 +2,53 @@
 # Install OpenVPN, ZeroTier, Vim, and Docker
 # Docker is installed using the official get.docker.com script
 # OpenVPN auto-start is disabled after installation
+# Supports: Ubuntu, Debian, CentOS (apt, dnf, yum)
 
 set -euo pipefail
 
+# Detect package manager
+detect_pkg_manager() {
+    if command -v apt-get &>/dev/null; then
+        echo "apt"
+    elif command -v dnf &>/dev/null; then
+        echo "dnf"
+    elif command -v yum &>/dev/null; then
+        echo "yum"
+    else
+        echo "unknown"
+    fi
+}
+
+PKG_MANAGER=$(detect_pkg_manager)
+
+if [ "$PKG_MANAGER" = "unknown" ]; then
+    echo "Error: Unsupported package manager. This script supports apt (Ubuntu/Debian), dnf and yum (CentOS/Fedora)."
+    exit 1
+fi
+
+echo "Detected package manager: $PKG_MANAGER"
+
+# Install packages based on package manager
+install_packages() {
+    case "$PKG_MANAGER" in
+        apt)
+            sudo apt-get update
+            sudo apt-get install -y "$@"
+            ;;
+        dnf)
+            sudo dnf install -y "$@"
+            ;;
+        yum)
+            sudo yum install -y "$@"
+            ;;
+    esac
+}
+
 echo "=== Installing Vim ==="
-sudo apt-get update
-sudo apt-get install -y vim
+install_packages vim
 
 echo "=== Installing OpenVPN ==="
-sudo apt-get install -y openvpn
+install_packages openvpn
 
 echo "=== Disabling OpenVPN auto-start ==="
 sudo systemctl stop openvpn || true
@@ -22,7 +60,7 @@ for service in $(sudo systemctl list-units 'openvpn@*' --all --no-legend 2>/dev/
 done
 
 echo "=== Installing ZeroTier ==="
-curl -s https://install.zerotier.com -o /tmp/install-zerotier.sh
+curl -fsSL https://install.zerotier.com -o /tmp/install-zerotier.sh
 sudo bash /tmp/install-zerotier.sh
 rm /tmp/install-zerotier.sh
 
@@ -36,6 +74,7 @@ sudo systemctl start docker
 sudo systemctl enable docker
 
 echo "=== Adding current user to docker group ==="
+# Note: This grants the user root-equivalent privileges since Docker daemon runs as root
 sudo usermod -aG docker "$USER"
 
 echo "=== Installation complete! ==="
