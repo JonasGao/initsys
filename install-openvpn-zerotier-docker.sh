@@ -122,6 +122,26 @@ if [[ "$REPLACE_PLANET" =~ ^[Yy]$ ]]; then
     echo "ZeroTier planet file replaced successfully."
 fi
 
+# Interactive: Join ZeroTier network
+echo ""
+read -rp "Do you want to join a ZeroTier network now? (y/n): " JOIN_NETWORK
+if [[ "$JOIN_NETWORK" =~ ^[Yy]$ ]]; then
+    read -rp "Enter the ZeroTier network ID: " NETWORK_ID
+    
+    if [ -z "$NETWORK_ID" ]; then
+        echo "Warning: Network ID is empty. Skipping network join."
+    else
+        echo "Joining ZeroTier network $NETWORK_ID..."
+        if sudo zerotier-cli join "$NETWORK_ID"; then
+            echo ""
+            echo "Network status:"
+            sudo zerotier-cli listnetworks || echo "Warning: Failed to get network status."
+        else
+            echo "Error: Failed to join ZeroTier network $NETWORK_ID."
+        fi
+    fi
+fi
+
 # Interactive: Choose container runtime (Docker or Podman)
 echo ""
 read -rp "Which container runtime do you want to install? (docker/podman): " CONTAINER_RUNTIME
