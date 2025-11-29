@@ -1,5 +1,5 @@
 #!/bin/bash
-# Install OpenVPN, ZeroTier, Vim, and Docker
+# Install OpenVPN, ZeroTier, Vim, and Docker/Podman
 # Docker is installed using the official get.docker.com script
 # OpenVPN auto-start is disabled after installation
 # Supports: Ubuntu, Debian, CentOS (apt, dnf, yum)
@@ -44,6 +44,20 @@ install_packages() {
     esac
 }
 
+# Download file using curl or wget
+download_file() {
+    local url="$1"
+    local output="$2"
+    if command -v curl &>/dev/null; then
+        curl -fsSL "$url" -o "$output"
+    elif command -v wget &>/dev/null; then
+        wget -q "$url" -O "$output"
+    else
+        echo "Error: Neither curl nor wget is available."
+        return 1
+    fi
+}
+
 echo "=== Installing Vim ==="
 install_packages vim
 
@@ -64,23 +78,100 @@ curl -fsSL https://install.zerotier.com -o /tmp/install-zerotier.sh
 sudo bash /tmp/install-zerotier.sh
 rm /tmp/install-zerotier.sh
 
-echo "=== Installing Docker using get.docker.com ==="
-curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
-sudo sh /tmp/get-docker.sh
-rm /tmp/get-docker.sh
+# Interactive: Replace ZeroTier planet file
+echo ""
+read -rp "Do you want to replace the ZeroTier planet file? (y/n): " REPLACE_PLANET
+if [[ "$REPLACE_PLANET" =~ ^[Yy]$ ]]; then
+    read -rp "Enter the planet file path or URL: " PLANET_SOURCE
+    
+    ZEROTIER_DIR="/var/lib/zerotier-one"
+    PLANET_FILE="$ZEROTIER_DIR/planet"
+    BACKUP_FILE="$ZEROTIER_DIR/planet.backup.$(date +%Y%m%d%H%M%S)"
+    
+    echo "Stopping ZeroTier service..."
+    sudo systemctl stop zerotier-one || true
+    
+    # Backup original planet file
+    if [ -f "$PLANET_FILE" ]; then
+        echo "Backing up original planet file to $BACKUP_FILE..."
+        sudo cp "$PLANET_FILE" "$BACKUP_FILE"
+    fi
+    
+    # Download or copy planet file
+    if [[ "$PLANET_SOURCE" =~ ^https?:// ]]; then
+        echo "Downloading planet file from $PLANET_SOURCE..."
+        download_file "$PLANET_SOURCE" /tmp/planet.new
+        if [ ! -f /tmp/planet.new ]; then
+            echo "Error: Failed to download planet file."
+            sudo systemctl start zerotier-one
+            exit 1
+        fi
+        sudo mv /tmp/planet.new "$PLANET_FILE"
+    else
+        if [ ! -f "$PLANET_SOURCE" ] || [ ! -r "$PLANET_SOURCE" ]; then
+            echo "Error: Planet file '$PLANET_SOURCE' does not exist or is not readable."
+            sudo systemctl start zerotier-one
+            exit 1
+        fi
+        echo "Copying planet file from $PLANET_SOURCE..."
+        sudo cp "$PLANET_SOURCE" "$PLANET_FILE"
+    fi
+    
+    echo "Restarting ZeroTier service..."
+    sudo systemctl start zerotier-one
+    echo "ZeroTier planet file replaced successfully."
+fi
 
-echo "=== Starting and enabling Docker ==="
-sudo systemctl start docker
-sudo systemctl enable docker
+# Interactive: Choose container runtime (Docker or Podman)
+echo ""
+read -rp "Which container runtime do you want to install? (docker/podman): " CONTAINER_RUNTIME
+CONTAINER_RUNTIME=$(echo "$CONTAINER_RUNTIME" | tr '[:upper:]' '[:lower:]')
+ENABLE_DOCKER=""
 
-echo "=== Adding current user to docker group ==="
-# Note: This grants the user root-equivalent privileges since Docker daemon runs as root
-sudo usermod -aG docker "$USER"
+if [ "$CONTAINER_RUNTIME" = "podman" ]; then
+    echo "=== Installing Podman ==="
+    install_packages podman
+    echo "Podman installed successfully."
+elif [ "$CONTAINER_RUNTIME" = "docker" ]; then
+    echo "=== Installing Docker using get.docker.com ==="
+    curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
+    sudo sh /tmp/get-docker.sh
+    rm /tmp/get-docker.sh
+    
+    # Interactive: Enable Docker by default?
+    echo ""
+    read -rp "Do you want to enable Docker to start automatically on boot? (y/n): " ENABLE_DOCKER
+    if [[ "$ENABLE_DOCKER" =~ ^[Yy]$ ]]; then
+        echo "=== Starting and enabling Docker ==="
+        sudo systemctl start docker
+        sudo systemctl enable docker
+    else
+        echo "=== Disabling Docker auto-start ==="
+        sudo systemctl stop docker || true
+        sudo systemctl disable docker || true
+    fi
+    
+    echo "=== Adding current user to docker group ==="
+    # Note: This grants the user root-equivalent privileges since Docker daemon runs as root
+    sudo usermod -aG docker "$USER"
+    echo "Docker installed successfully."
+else
+    echo "Invalid choice. Skipping container runtime installation."
+fi
 
+echo ""
 echo "=== Installation complete! ==="
 echo "OpenVPN: installed (auto-start disabled)"
 echo "ZeroTier: installed"
 echo "Vim: installed"
-echo "Docker: installed and enabled"
-echo ""
-echo "Note: You may need to log out and back in for docker group changes to take effect."
+if [ "$CONTAINER_RUNTIME" = "docker" ]; then
+    if [[ "$ENABLE_DOCKER" =~ ^[Yy]$ ]]; then
+        echo "Docker: installed and enabled"
+    else
+        echo "Docker: installed (auto-start disabled)"
+    fi
+    echo ""
+    echo "Note: You may need to log out and back in for docker group changes to take effect."
+elif [ "$CONTAINER_RUNTIME" = "podman" ]; then
+    echo "Podman: installed"
+fi
