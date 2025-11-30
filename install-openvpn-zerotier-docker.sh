@@ -61,17 +61,22 @@ download_file() {
 echo "=== Installing Vim ==="
 install_packages vim
 
-echo "=== Installing OpenVPN ==="
-install_packages openvpn
+# Interactive: Install OpenVPN
+echo ""
+read -rp "Do you want to install OpenVPN? (y/n): " INSTALL_OPENVPN
+if [[ "$INSTALL_OPENVPN" =~ ^[Yy]$ ]]; then
+    echo "=== Installing OpenVPN ==="
+    install_packages openvpn
 
-echo "=== Disabling OpenVPN auto-start ==="
-sudo systemctl stop openvpn || true
-sudo systemctl disable openvpn || true
-# Disable any OpenVPN instance services (openvpn@server, openvpn@client, etc.)
-for service in $(sudo systemctl list-units 'openvpn@*' --all --no-legend 2>/dev/null | awk '{print $1}'); do
-    sudo systemctl stop "$service" || true
-    sudo systemctl disable "$service" || true
-done
+    echo "=== Disabling OpenVPN auto-start ==="
+    sudo systemctl stop openvpn || true
+    sudo systemctl disable openvpn || true
+    # Disable any OpenVPN instance services (openvpn@server, openvpn@client, etc.)
+    for service in $(sudo systemctl list-units 'openvpn@*' --all --no-legend 2>/dev/null | awk '{print $1}'); do
+        sudo systemctl stop "$service" || true
+        sudo systemctl disable "$service" || true
+    done
+fi
 
 echo "=== Installing ZeroTier ==="
 curl -fsSL https://install.zerotier.com -o /tmp/install-zerotier.sh
@@ -181,7 +186,11 @@ fi
 
 echo ""
 echo "=== Installation complete! ==="
-echo "OpenVPN: installed (auto-start disabled)"
+if [[ "${INSTALL_OPENVPN:-}" =~ ^[Yy]$ ]]; then
+    echo "OpenVPN: installed (auto-start disabled)"
+else
+    echo "OpenVPN: skipped"
+fi
 echo "ZeroTier: installed"
 echo "Vim: installed"
 if [ "$CONTAINER_RUNTIME" = "docker" ]; then
