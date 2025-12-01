@@ -13,6 +13,13 @@
 
 set -euo pipefail
 
+# Detect if running as root
+if [ "$(id -u)" -eq 0 ]; then
+    SUDO=""
+else
+    SUDO="sudo"
+fi
+
 # Detect package manager
 detect_pkg_manager() {
     if command -v apt-get &>/dev/null; then
@@ -139,14 +146,14 @@ echo ""
 install_packages() {
     case "$PKG_MANAGER" in
         apt)
-            sudo apt-get update
-            sudo apt-get install -y "$@"
+            $SUDO apt-get update
+            $SUDO apt-get install -y "$@"
             ;;
         dnf)
-            sudo dnf install -y "$@"
+            $SUDO dnf install -y "$@"
             ;;
         yum)
-            sudo yum install -y "$@"
+            $SUDO yum install -y "$@"
             ;;
     esac
 }
@@ -175,19 +182,19 @@ if [[ "$INSTALL_OPENVPN" =~ ^y$ ]]; then
     install_packages openvpn
 
     echo "=== Disabling OpenVPN auto-start ==="
-    sudo systemctl stop openvpn || true
-    sudo systemctl disable openvpn || true
+    $SUDO systemctl stop openvpn || true
+    $SUDO systemctl disable openvpn || true
     # Disable any OpenVPN instance services (openvpn@server, openvpn@client, etc.)
-    for service in $(sudo systemctl list-units 'openvpn@*' --all --no-legend 2>/dev/null | awk '{print $1}'); do
-        sudo systemctl stop "$service" || true
-        sudo systemctl disable "$service" || true
+    for service in $($SUDO systemctl list-units 'openvpn@*' --all --no-legend 2>/dev/null | awk '{print $1}'); do
+        $SUDO systemctl stop "$service" || true
+        $SUDO systemctl disable "$service" || true
     done
 fi
 
 # Install ZeroTier
 echo "=== Installing ZeroTier ==="
 curl -fsSL https://install.zerotier.com -o /tmp/install-zerotier.sh
-sudo bash /tmp/install-zerotier.sh
+$SUDO bash /tmp/install-zerotier.sh
 rm /tmp/install-zerotier.sh
 
 # Replace ZeroTier planet file
@@ -197,12 +204,12 @@ if [[ "$REPLACE_PLANET" =~ ^y$ ]] && [ -n "$PLANET_SOURCE" ]; then
     BACKUP_FILE="$ZEROTIER_DIR/planet.backup.$(date +%Y%m%d%H%M%S)"
     
     echo "Stopping ZeroTier service..."
-    sudo systemctl stop zerotier-one || true
+    $SUDO systemctl stop zerotier-one || true
     
     # Backup original planet file
     if [ -f "$PLANET_FILE" ]; then
         echo "Backing up original planet file to $BACKUP_FILE..."
-        sudo cp "$PLANET_FILE" "$BACKUP_FILE"
+        $SUDO cp "$PLANET_FILE" "$BACKUP_FILE"
     fi
     
     # Download or copy planet file
@@ -211,32 +218,32 @@ if [[ "$REPLACE_PLANET" =~ ^y$ ]] && [ -n "$PLANET_SOURCE" ]; then
         download_file "$PLANET_SOURCE" /tmp/planet.new
         if [ ! -f /tmp/planet.new ]; then
             echo "Error: Failed to download planet file."
-            sudo systemctl start zerotier-one
+            $SUDO systemctl start zerotier-one
             exit 1
         fi
-        sudo mv /tmp/planet.new "$PLANET_FILE"
+        $SUDO mv /tmp/planet.new "$PLANET_FILE"
     else
         if [ ! -f "$PLANET_SOURCE" ] || [ ! -r "$PLANET_SOURCE" ]; then
             echo "Error: Planet file '$PLANET_SOURCE' does not exist or is not readable."
-            sudo systemctl start zerotier-one
+            $SUDO systemctl start zerotier-one
             exit 1
         fi
         echo "Copying planet file from $PLANET_SOURCE..."
-        sudo cp "$PLANET_SOURCE" "$PLANET_FILE"
+        $SUDO cp "$PLANET_SOURCE" "$PLANET_FILE"
     fi
     
     echo "Restarting ZeroTier service..."
-    sudo systemctl start zerotier-one
+    $SUDO systemctl start zerotier-one
     echo "ZeroTier planet file replaced successfully."
 fi
 
 # Join ZeroTier network
 if [[ "$JOIN_NETWORK" =~ ^y$ ]] && [ -n "$NETWORK_ID" ]; then
     echo "Joining ZeroTier network $NETWORK_ID..."
-    if sudo zerotier-cli join "$NETWORK_ID"; then
+    if $SUDO zerotier-cli join "$NETWORK_ID"; then
         echo ""
         echo "Network status:"
-        sudo zerotier-cli listnetworks || echo "Warning: Failed to get network status."
+        $SUDO zerotier-cli listnetworks || echo "Warning: Failed to get network status."
     else
         echo "Error: Failed to join ZeroTier network $NETWORK_ID."
     fi
@@ -250,22 +257,22 @@ if [ "$CONTAINER_RUNTIME" = "podman" ]; then
 elif [ "$CONTAINER_RUNTIME" = "docker" ]; then
     echo "=== Installing Docker using get.docker.com ==="
     curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
-    sudo sh /tmp/get-docker.sh
+    $SUDO sh /tmp/get-docker.sh
     rm /tmp/get-docker.sh
     
     if [[ "$ENABLE_DOCKER" =~ ^y$ ]]; then
         echo "=== Starting and enabling Docker ==="
-        sudo systemctl start docker
-        sudo systemctl enable docker
+        $SUDO systemctl start docker
+        $SUDO systemctl enable docker
     else
         echo "=== Disabling Docker auto-start ==="
-        sudo systemctl stop docker || true
-        sudo systemctl disable docker || true
+        $SUDO systemctl stop docker || true
+        $SUDO systemctl disable docker || true
     fi
     
     echo "=== Adding current user to docker group ==="
     # Note: This grants the user root-equivalent privileges since Docker daemon runs as root
-    sudo usermod -aG docker "$USER"
+    $SUDO usermod -aG docker "$USER"
     echo "Docker installed successfully."
 fi
 
