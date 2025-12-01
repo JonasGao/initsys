@@ -27,6 +27,106 @@ if [ "$PKG_MANAGER" = "unknown" ]; then
 fi
 
 echo "Detected package manager: $PKG_MANAGER"
+echo ""
+
+# ============================================
+# Phase 1: Collect all user choices
+# ============================================
+
+echo "=== Configuration ==="
+echo ""
+
+# OpenVPN
+read -rp "Do you want to install OpenVPN? (y/n): " INSTALL_OPENVPN
+INSTALL_OPENVPN=$(echo "$INSTALL_OPENVPN" | tr '[:upper:]' '[:lower:]')
+
+# ZeroTier planet file
+read -rp "Do you want to replace the ZeroTier planet file? (y/n): " REPLACE_PLANET
+REPLACE_PLANET=$(echo "$REPLACE_PLANET" | tr '[:upper:]' '[:lower:]')
+PLANET_SOURCE=""
+if [[ "$REPLACE_PLANET" =~ ^y$ ]]; then
+    read -rp "Enter the planet file path or URL: " PLANET_SOURCE
+fi
+
+# ZeroTier network
+read -rp "Do you want to join a ZeroTier network? (y/n): " JOIN_NETWORK
+JOIN_NETWORK=$(echo "$JOIN_NETWORK" | tr '[:upper:]' '[:lower:]')
+NETWORK_ID=""
+if [[ "$JOIN_NETWORK" =~ ^y$ ]]; then
+    read -rp "Enter the ZeroTier network ID: " NETWORK_ID
+fi
+
+# Container runtime
+read -rp "Which container runtime do you want to install? (docker/podman/none): " CONTAINER_RUNTIME
+CONTAINER_RUNTIME=$(echo "$CONTAINER_RUNTIME" | tr '[:upper:]' '[:lower:]')
+
+# Docker auto-start
+ENABLE_DOCKER=""
+if [ "$CONTAINER_RUNTIME" = "docker" ]; then
+    read -rp "Do you want to enable Docker to start automatically on boot? (y/n): " ENABLE_DOCKER
+    ENABLE_DOCKER=$(echo "$ENABLE_DOCKER" | tr '[:upper:]' '[:lower:]')
+fi
+
+# ============================================
+# Phase 2: Show configuration summary
+# ============================================
+
+echo ""
+echo "============================================"
+echo "=== Configuration Summary ==="
+echo "============================================"
+echo ""
+echo "Package Manager: $PKG_MANAGER"
+echo "Vim: will be installed"
+if [[ "$INSTALL_OPENVPN" =~ ^y$ ]]; then
+    echo "OpenVPN: will be installed (auto-start disabled)"
+else
+    echo "OpenVPN: will be skipped"
+fi
+echo "ZeroTier: will be installed"
+if [[ "$REPLACE_PLANET" =~ ^y$ ]]; then
+    echo "  - Planet file: will be replaced from $PLANET_SOURCE"
+else
+    echo "  - Planet file: will not be replaced"
+fi
+if [[ "$JOIN_NETWORK" =~ ^y$ ]] && [ -n "$NETWORK_ID" ]; then
+    echo "  - Network: will join $NETWORK_ID"
+else
+    echo "  - Network: will not join any network"
+fi
+if [ "$CONTAINER_RUNTIME" = "docker" ]; then
+    if [[ "$ENABLE_DOCKER" =~ ^y$ ]]; then
+        echo "Container Runtime: Docker (auto-start enabled)"
+    else
+        echo "Container Runtime: Docker (auto-start disabled)"
+    fi
+elif [ "$CONTAINER_RUNTIME" = "podman" ]; then
+    echo "Container Runtime: Podman"
+else
+    echo "Container Runtime: none"
+fi
+echo ""
+echo "============================================"
+echo ""
+
+# ============================================
+# Phase 3: Confirm and proceed
+# ============================================
+
+read -rp "Proceed with the installation? (y/n): " CONFIRM
+CONFIRM=$(echo "$CONFIRM" | tr '[:upper:]' '[:lower:]')
+if [[ ! "$CONFIRM" =~ ^y$ ]]; then
+    echo "Installation cancelled."
+    exit 0
+fi
+
+echo ""
+echo "Starting installation..."
+echo ""
+
+# ============================================
+# Phase 4: Execute installation
+# ============================================
 
 # Install packages based on package manager
 install_packages() {
@@ -58,13 +158,12 @@ download_file() {
     fi
 }
 
+# Install Vim
 echo "=== Installing Vim ==="
 install_packages vim
 
-# Interactive: Install OpenVPN
-echo ""
-read -rp "Do you want to install OpenVPN? (y/n): " INSTALL_OPENVPN
-if [[ "$INSTALL_OPENVPN" =~ ^[Yy]$ ]]; then
+# Install OpenVPN
+if [[ "$INSTALL_OPENVPN" =~ ^y$ ]]; then
     echo "=== Installing OpenVPN ==="
     install_packages openvpn
 
@@ -78,17 +177,14 @@ if [[ "$INSTALL_OPENVPN" =~ ^[Yy]$ ]]; then
     done
 fi
 
+# Install ZeroTier
 echo "=== Installing ZeroTier ==="
 curl -fsSL https://install.zerotier.com -o /tmp/install-zerotier.sh
 sudo bash /tmp/install-zerotier.sh
 rm /tmp/install-zerotier.sh
 
-# Interactive: Replace ZeroTier planet file
-echo ""
-read -rp "Do you want to replace the ZeroTier planet file? (y/n): " REPLACE_PLANET
-if [[ "$REPLACE_PLANET" =~ ^[Yy]$ ]]; then
-    read -rp "Enter the planet file path or URL: " PLANET_SOURCE
-    
+# Replace ZeroTier planet file
+if [[ "$REPLACE_PLANET" =~ ^y$ ]] && [ -n "$PLANET_SOURCE" ]; then
     ZEROTIER_DIR="/var/lib/zerotier-one"
     PLANET_FILE="$ZEROTIER_DIR/planet"
     BACKUP_FILE="$ZEROTIER_DIR/planet.backup.$(date +%Y%m%d%H%M%S)"
@@ -127,32 +223,19 @@ if [[ "$REPLACE_PLANET" =~ ^[Yy]$ ]]; then
     echo "ZeroTier planet file replaced successfully."
 fi
 
-# Interactive: Join ZeroTier network
-echo ""
-read -rp "Do you want to join a ZeroTier network now? (y/n): " JOIN_NETWORK
-if [[ "$JOIN_NETWORK" =~ ^[Yy]$ ]]; then
-    read -rp "Enter the ZeroTier network ID: " NETWORK_ID
-    
-    if [ -z "$NETWORK_ID" ]; then
-        echo "Warning: Network ID is empty. Skipping network join."
+# Join ZeroTier network
+if [[ "$JOIN_NETWORK" =~ ^y$ ]] && [ -n "$NETWORK_ID" ]; then
+    echo "Joining ZeroTier network $NETWORK_ID..."
+    if sudo zerotier-cli join "$NETWORK_ID"; then
+        echo ""
+        echo "Network status:"
+        sudo zerotier-cli listnetworks || echo "Warning: Failed to get network status."
     else
-        echo "Joining ZeroTier network $NETWORK_ID..."
-        if sudo zerotier-cli join "$NETWORK_ID"; then
-            echo ""
-            echo "Network status:"
-            sudo zerotier-cli listnetworks || echo "Warning: Failed to get network status."
-        else
-            echo "Error: Failed to join ZeroTier network $NETWORK_ID."
-        fi
+        echo "Error: Failed to join ZeroTier network $NETWORK_ID."
     fi
 fi
 
-# Interactive: Choose container runtime (Docker or Podman)
-echo ""
-read -rp "Which container runtime do you want to install? (docker/podman): " CONTAINER_RUNTIME
-CONTAINER_RUNTIME=$(echo "$CONTAINER_RUNTIME" | tr '[:upper:]' '[:lower:]')
-ENABLE_DOCKER=""
-
+# Install container runtime
 if [ "$CONTAINER_RUNTIME" = "podman" ]; then
     echo "=== Installing Podman ==="
     install_packages podman
@@ -163,10 +246,7 @@ elif [ "$CONTAINER_RUNTIME" = "docker" ]; then
     sudo sh /tmp/get-docker.sh
     rm /tmp/get-docker.sh
     
-    # Interactive: Enable Docker by default?
-    echo ""
-    read -rp "Do you want to enable Docker to start automatically on boot? (y/n): " ENABLE_DOCKER
-    if [[ "$ENABLE_DOCKER" =~ ^[Yy]$ ]]; then
+    if [[ "$ENABLE_DOCKER" =~ ^y$ ]]; then
         echo "=== Starting and enabling Docker ==="
         sudo systemctl start docker
         sudo systemctl enable docker
@@ -180,21 +260,32 @@ elif [ "$CONTAINER_RUNTIME" = "docker" ]; then
     # Note: This grants the user root-equivalent privileges since Docker daemon runs as root
     sudo usermod -aG docker "$USER"
     echo "Docker installed successfully."
-else
-    echo "Invalid choice. Skipping container runtime installation."
 fi
 
+# ============================================
+# Phase 5: Show installation summary
+# ============================================
+
 echo ""
-echo "=== Installation complete! ==="
-if [[ "${INSTALL_OPENVPN:-}" =~ ^[Yy]$ ]]; then
+echo "============================================"
+echo "=== Installation Complete! ==="
+echo "============================================"
+echo ""
+echo "Vim: installed"
+if [[ "$INSTALL_OPENVPN" =~ ^y$ ]]; then
     echo "OpenVPN: installed (auto-start disabled)"
 else
     echo "OpenVPN: skipped"
 fi
 echo "ZeroTier: installed"
-echo "Vim: installed"
+if [[ "$REPLACE_PLANET" =~ ^y$ ]]; then
+    echo "  - Planet file: replaced"
+fi
+if [[ "$JOIN_NETWORK" =~ ^y$ ]] && [ -n "$NETWORK_ID" ]; then
+    echo "  - Network: joined $NETWORK_ID"
+fi
 if [ "$CONTAINER_RUNTIME" = "docker" ]; then
-    if [[ "$ENABLE_DOCKER" =~ ^[Yy]$ ]]; then
+    if [[ "$ENABLE_DOCKER" =~ ^y$ ]]; then
         echo "Docker: installed and enabled"
     else
         echo "Docker: installed (auto-start disabled)"
