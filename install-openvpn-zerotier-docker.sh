@@ -239,6 +239,8 @@ fi
 
 # Join ZeroTier network
 if [[ "$JOIN_NETWORK" =~ ^y$ ]] && [ -n "$NETWORK_ID" ]; then
+    echo "Waiting for ZeroTier service to be ready..."
+    sleep 3
     echo "Joining ZeroTier network $NETWORK_ID..."
     if $SUDO zerotier-cli join "$NETWORK_ID"; then
         echo ""
