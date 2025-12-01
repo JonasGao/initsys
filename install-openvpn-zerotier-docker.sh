@@ -44,33 +44,33 @@ echo "=== Configuration ==="
 echo ""
 
 # OpenVPN
-read -rp "Do you want to install OpenVPN? (y/n): " INSTALL_OPENVPN
+read -rp "Do you want to install OpenVPN? (y/n): " INSTALL_OPENVPN < /dev/tty
 INSTALL_OPENVPN=$(echo "$INSTALL_OPENVPN" | tr '[:upper:]' '[:lower:]')
 
 # ZeroTier planet file
-read -rp "Do you want to replace the ZeroTier planet file? (y/n): " REPLACE_PLANET
+read -rp "Do you want to replace the ZeroTier planet file? (y/n): " REPLACE_PLANET < /dev/tty
 REPLACE_PLANET=$(echo "$REPLACE_PLANET" | tr '[:upper:]' '[:lower:]')
 PLANET_SOURCE=""
 if [[ "$REPLACE_PLANET" =~ ^y$ ]]; then
-    read -rp "Enter the planet file path or URL: " PLANET_SOURCE
+    read -rp "Enter the planet file path or URL: " PLANET_SOURCE < /dev/tty
 fi
 
 # ZeroTier network
-read -rp "Do you want to join a ZeroTier network? (y/n): " JOIN_NETWORK
+read -rp "Do you want to join a ZeroTier network? (y/n): " JOIN_NETWORK < /dev/tty
 JOIN_NETWORK=$(echo "$JOIN_NETWORK" | tr '[:upper:]' '[:lower:]')
 NETWORK_ID=""
 if [[ "$JOIN_NETWORK" =~ ^y$ ]]; then
-    read -rp "Enter the ZeroTier network ID: " NETWORK_ID
+    read -rp "Enter the ZeroTier network ID: " NETWORK_ID < /dev/tty
 fi
 
 # Container runtime
-read -rp "Which container runtime do you want to install? (docker/podman/none): " CONTAINER_RUNTIME
+read -rp "Which container runtime do you want to install? (docker/podman/none): " CONTAINER_RUNTIME < /dev/tty
 CONTAINER_RUNTIME=$(echo "$CONTAINER_RUNTIME" | tr '[:upper:]' '[:lower:]')
 
 # Docker auto-start
 ENABLE_DOCKER=""
 if [ "$CONTAINER_RUNTIME" = "docker" ]; then
-    read -rp "Do you want to enable Docker to start automatically on boot? (y/n): " ENABLE_DOCKER
+    read -rp "Do you want to enable Docker to start automatically on boot? (y/n): " ENABLE_DOCKER < /dev/tty
     ENABLE_DOCKER=$(echo "$ENABLE_DOCKER" | tr '[:upper:]' '[:lower:]')
 fi
 
@@ -120,7 +120,7 @@ echo ""
 # Phase 3: Confirm and proceed
 # ============================================
 
-read -rp "Proceed with the installation? (y/n): " CONFIRM
+read -rp "Proceed with the installation? (y/n): " CONFIRM < /dev/tty
 CONFIRM=$(echo "$CONFIRM" | tr '[:upper:]' '[:lower:]')
 if [[ ! "$CONFIRM" =~ ^y$ ]]; then
     echo "Installation cancelled."
