@@ -3,6 +3,13 @@
 # Docker is installed using the official get.docker.com script
 # OpenVPN auto-start is disabled after installation
 # Supports: Ubuntu, Debian, CentOS (apt, dnf, yum)
+#
+# One-line execution:
+#   curl -fsSL https://raw.githubusercontent.com/JonasGao/initsys/main/install-openvpn-zerotier-docker.sh | bash
+#
+# Or download and execute:
+#   curl -fsSL https://raw.githubusercontent.com/JonasGao/initsys/main/install-openvpn-zerotier-docker.sh -o install.sh
+#   bash install.sh
 
 set -euo pipefail
 
