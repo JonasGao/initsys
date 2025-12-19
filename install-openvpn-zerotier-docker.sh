@@ -254,13 +254,25 @@ fi
 # Install container runtime
 if [ "$CONTAINER_RUNTIME" = "podman" ]; then
     echo "=== Installing Podman ==="
-    install_packages podman
-    echo "Podman installed successfully."
+    if command -v podman &>/dev/null; then
+        echo "Podman is already installed. Skipping installation."
+        podman --version
+    else
+        install_packages podman
+        echo "Podman installed successfully."
+    fi
 elif [ "$CONTAINER_RUNTIME" = "docker" ]; then
     echo "=== Installing Docker using get.docker.com ==="
-    curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
-    $SUDO sh /tmp/get-docker.sh
-    rm /tmp/get-docker.sh
+    DOCKER_ALREADY_INSTALLED=false
+    if command -v docker &>/dev/null; then
+        echo "Docker is already installed. Skipping installation."
+        docker --version
+        DOCKER_ALREADY_INSTALLED=true
+    else
+        curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
+        $SUDO sh /tmp/get-docker.sh
+        rm /tmp/get-docker.sh
+    fi
     
     if [[ "$ENABLE_DOCKER" =~ ^y$ ]]; then
         echo "=== Starting and enabling Docker ==="
@@ -275,7 +287,12 @@ elif [ "$CONTAINER_RUNTIME" = "docker" ]; then
     echo "=== Adding current user to docker group ==="
     # Note: This grants the user root-equivalent privileges since Docker daemon runs as root
     $SUDO usermod -aG docker "$USER"
-    echo "Docker installed successfully."
+    
+    if [ "$DOCKER_ALREADY_INSTALLED" = true ]; then
+        echo "Docker setup complete."
+    else
+        echo "Docker installed successfully."
+    fi
 fi
 
 # ============================================
