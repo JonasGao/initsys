@@ -7,7 +7,6 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=nobody
-Group=nogroup
 ExecStart=/usr/local/bin/node_exporter
 Restart=on-failure
 RestartSec=5
