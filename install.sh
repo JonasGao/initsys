@@ -2,6 +2,7 @@
 # Install OpenVPN, ZeroTier, Vim, curl, wget, ripgrep, bat, fzf, fd, Node Exporter, and Docker/Podman
 # Docker is installed using the official get.docker.com script
 # OpenVPN auto-start is disabled after installation
+# Node Exporter installation is optional and can be skipped
 # Node Exporter auto-start can be enabled or disabled based on user preference
 # Node Exporter service file is automatically downloaded if not present locally
 # Supports: Ubuntu, Debian, CentOS (apt, dnf, yum)
