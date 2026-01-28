@@ -70,6 +70,10 @@ if [[ "$JOIN_NETWORK" =~ ^y$ ]]; then
     read -rp "Enter the ZeroTier network ID: " NETWORK_ID < /dev/tty
 fi
 
+# Node Exporter auto-start
+read -rp "Do you want to enable Node Exporter to start automatically on boot? (y/n): " ENABLE_NODE_EXPORTER < /dev/tty
+ENABLE_NODE_EXPORTER=$(echo "$ENABLE_NODE_EXPORTER" | tr '[:upper:]' '[:lower:]')
+
 # Container runtime
 read -rp "Which container runtime do you want to install? (docker/podman/none): " CONTAINER_RUNTIME < /dev/tty
 CONTAINER_RUNTIME=$(echo "$CONTAINER_RUNTIME" | tr '[:upper:]' '[:lower:]')
@@ -92,6 +96,12 @@ echo "============================================"
 echo ""
 echo "Package Manager: $PKG_MANAGER"
 echo "Vim: will be installed"
+echo "curl/wget: will be installed"
+if [[ "$ENABLE_NODE_EXPORTER" =~ ^y$ ]]; then
+    echo "Node Exporter: will be installed (auto-start enabled)"
+else
+    echo "Node Exporter: will be installed (auto-start disabled)"
+fi
 if [[ "$INSTALL_OPENVPN" =~ ^y$ ]]; then
     echo "OpenVPN: will be installed (auto-start disabled)"
 else
@@ -175,6 +185,74 @@ download_file() {
 # Install Vim
 echo "=== Installing Vim ==="
 install_packages vim
+
+# Install curl and wget
+echo "=== Installing curl and wget ==="
+install_packages curl wget
+
+# Install Node Exporter
+echo "=== Installing Node Exporter ==="
+
+# Detect system architecture
+ARCH=$(uname -m)
+case "$ARCH" in
+    x86_64)
+        NODE_EXPORTER_ARCH="amd64"
+        ;;
+    aarch64|arm64)
+        NODE_EXPORTER_ARCH="arm64"
+        ;;
+    armv7l)
+        NODE_EXPORTER_ARCH="armv7"
+        ;;
+    *)
+        echo "Warning: Unsupported architecture $ARCH. Defaulting to amd64."
+        NODE_EXPORTER_ARCH="amd64"
+        ;;
+esac
+
+# Get latest version of node_exporter
+NODE_EXPORTER_VERSION=$(curl -s https://api.github.com/repos/prometheus/node_exporter/releases/latest | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/')
+if [ -z "$NODE_EXPORTER_VERSION" ]; then
+    echo "Warning: Could not detect latest version. Using v1.7.0 as default."
+    NODE_EXPORTER_VERSION="1.7.0"
+fi
+
+echo "Installing Node Exporter version $NODE_EXPORTER_VERSION for architecture $NODE_EXPORTER_ARCH..."
+
+# Download and install node_exporter
+NODE_EXPORTER_URL="https://github.com/prometheus/node_exporter/releases/download/v${NODE_EXPORTER_VERSION}/node_exporter-${NODE_EXPORTER_VERSION}.linux-${NODE_EXPORTER_ARCH}.tar.gz"
+download_file "$NODE_EXPORTER_URL" /tmp/node_exporter.tar.gz
+
+# Extract and install
+cd /tmp
+tar xzf node_exporter.tar.gz
+$SUDO mv "node_exporter-${NODE_EXPORTER_VERSION}.linux-${NODE_EXPORTER_ARCH}/node_exporter" /usr/local/bin/
+$SUDO chmod +x /usr/local/bin/node_exporter
+
+# Clean up
+rm -rf /tmp/node_exporter.tar.gz "node_exporter-${NODE_EXPORTER_VERSION}.linux-${NODE_EXPORTER_ARCH}"
+
+# Get the script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Install systemd service
+if [ -f "$SCRIPT_DIR/node_exporter.service" ]; then
+    echo "Installing Node Exporter systemd service..."
+    $SUDO cp "$SCRIPT_DIR/node_exporter.service" /etc/systemd/system/
+    $SUDO systemctl daemon-reload
+    
+    if [[ "$ENABLE_NODE_EXPORTER" =~ ^y$ ]]; then
+        echo "=== Starting and enabling Node Exporter ==="
+        $SUDO systemctl start node_exporter
+        $SUDO systemctl enable node_exporter
+    else
+        echo "=== Node Exporter installed but not started ==="
+    fi
+else
+    echo "Warning: node_exporter.service file not found in $SCRIPT_DIR"
+    echo "You will need to manually create a systemd service file for Node Exporter."
+fi
 
 # Install OpenVPN
 if [[ "$INSTALL_OPENVPN" =~ ^y$ ]]; then
@@ -305,6 +383,12 @@ echo "=== Installation Complete! ==="
 echo "============================================"
 echo ""
 echo "Vim: installed"
+echo "curl/wget: installed"
+if [[ "$ENABLE_NODE_EXPORTER" =~ ^y$ ]]; then
+    echo "Node Exporter: installed and enabled"
+else
+    echo "Node Exporter: installed (auto-start disabled)"
+fi
 if [[ "$INSTALL_OPENVPN" =~ ^y$ ]]; then
     echo "OpenVPN: installed (auto-start disabled)"
 else
