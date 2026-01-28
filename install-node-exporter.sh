@@ -199,7 +199,7 @@ else
                 echo "Node Exporter service started and enabled successfully."
             else
                 echo "Warning: Failed to start or enable Node Exporter service."
-                exit 1
+                echo "You may need to check the service status manually: systemctl status node_exporter"
             fi
         else
             echo "=== Node Exporter installed but not started ==="
