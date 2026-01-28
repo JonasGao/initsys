@@ -1,14 +1,16 @@
 #!/bin/bash
-# Install OpenVPN, ZeroTier, Vim, and Docker/Podman
+# Install OpenVPN, ZeroTier, Vim, curl, wget, Node Exporter, and Docker/Podman
 # Docker is installed using the official get.docker.com script
 # OpenVPN auto-start is disabled after installation
+# Node Exporter auto-start can be enabled or disabled based on user preference
 # Supports: Ubuntu, Debian, CentOS (apt, dnf, yum)
 #
-# One-line execution:
+# One-line execution (Note: For Node Exporter, download script first):
 #   curl -fsSL https://raw.githubusercontent.com/JonasGao/initsys/main/install-openvpn-zerotier-docker.sh | bash
 #
-# Or download and execute:
+# Or download and execute (recommended for Node Exporter installation):
 #   curl -fsSL https://raw.githubusercontent.com/JonasGao/initsys/main/install-openvpn-zerotier-docker.sh -o install.sh
+#   curl -fsSL https://raw.githubusercontent.com/JonasGao/initsys/main/node_exporter.service -o node_exporter.service
 #   bash install.sh
 
 set -euo pipefail
@@ -193,6 +195,12 @@ install_packages curl wget
 # Install Node Exporter
 echo "=== Installing Node Exporter ==="
 
+# Create dedicated system user for Node Exporter
+if ! id -u node_exporter &>/dev/null; then
+    echo "Creating system user for Node Exporter..."
+    $SUDO useradd --no-create-home --shell /bin/false node_exporter
+fi
+
 # Detect system architecture
 ARCH=$(uname -m)
 case "$ARCH" in
@@ -224,34 +232,48 @@ echo "Installing Node Exporter version $NODE_EXPORTER_VERSION for architecture $
 NODE_EXPORTER_URL="https://github.com/prometheus/node_exporter/releases/download/v${NODE_EXPORTER_VERSION}/node_exporter-${NODE_EXPORTER_VERSION}.linux-${NODE_EXPORTER_ARCH}.tar.gz"
 download_file "$NODE_EXPORTER_URL" /tmp/node_exporter.tar.gz
 
-# Extract and install
-cd /tmp
-tar xzf node_exporter.tar.gz
-$SUDO mv "node_exporter-${NODE_EXPORTER_VERSION}.linux-${NODE_EXPORTER_ARCH}/node_exporter" /usr/local/bin/
-$SUDO chmod +x /usr/local/bin/node_exporter
+# Extract and install in a subshell to avoid changing working directory
+(
+    cd /tmp
+    tar xzf node_exporter.tar.gz
+    $SUDO mv "node_exporter-${NODE_EXPORTER_VERSION}.linux-${NODE_EXPORTER_ARCH}/node_exporter" /usr/local/bin/
+    $SUDO chmod +x /usr/local/bin/node_exporter
+)
 
 # Clean up
-rm -rf /tmp/node_exporter.tar.gz "node_exporter-${NODE_EXPORTER_VERSION}.linux-${NODE_EXPORTER_ARCH}"
+rm -rf /tmp/node_exporter.tar.gz "/tmp/node_exporter-${NODE_EXPORTER_VERSION}.linux-${NODE_EXPORTER_ARCH}" || true
 
 # Get the script directory
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd 2>/dev/null)" || SCRIPT_DIR="."
 
-# Install systemd service
-if [ -f "$SCRIPT_DIR/node_exporter.service" ]; then
-    echo "Installing Node Exporter systemd service..."
-    $SUDO cp "$SCRIPT_DIR/node_exporter.service" /etc/systemd/system/
-    $SUDO systemctl daemon-reload
-    
-    if [[ "$ENABLE_NODE_EXPORTER" =~ ^y$ ]]; then
-        echo "=== Starting and enabling Node Exporter ==="
-        $SUDO systemctl start node_exporter
-        $SUDO systemctl enable node_exporter
-    else
-        echo "=== Node Exporter installed but not started ==="
-    fi
+# Verify node_exporter binary was installed successfully
+if [ ! -f /usr/local/bin/node_exporter ]; then
+    echo "Error: Failed to install Node Exporter binary to /usr/local/bin/node_exporter"
+    echo "Skipping systemd service installation."
 else
-    echo "Warning: node_exporter.service file not found in $SCRIPT_DIR"
-    echo "You will need to manually create a systemd service file for Node Exporter."
+    echo "Node Exporter binary installed successfully to /usr/local/bin/node_exporter"
+    
+    # Install systemd service
+    if [ -f "$SCRIPT_DIR/node_exporter.service" ]; then
+        echo "Installing Node Exporter systemd service..."
+        $SUDO cp "$SCRIPT_DIR/node_exporter.service" /etc/systemd/system/
+        $SUDO systemctl daemon-reload
+        
+        if [[ "$ENABLE_NODE_EXPORTER" =~ ^y$ ]]; then
+            echo "=== Starting and enabling Node Exporter ==="
+            if $SUDO systemctl start node_exporter && $SUDO systemctl enable node_exporter; then
+                echo "Node Exporter service started and enabled successfully."
+            else
+                echo "Warning: Failed to start or enable Node Exporter service."
+            fi
+        else
+            echo "=== Node Exporter installed but not started ==="
+        fi
+    else
+        echo "Warning: node_exporter.service file not found in $SCRIPT_DIR"
+        echo "You can create a systemd service manually or download it from:"
+        echo "https://raw.githubusercontent.com/JonasGao/initsys/main/node_exporter.service"
+    fi
 fi
 
 # Install OpenVPN
