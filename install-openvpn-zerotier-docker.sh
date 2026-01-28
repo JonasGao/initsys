@@ -1,16 +1,16 @@
 #!/bin/bash
-# Install OpenVPN, ZeroTier, Vim, curl, wget, Node Exporter, and Docker/Podman
+# Install OpenVPN, ZeroTier, Vim, curl, wget, ripgrep, bat, fzf, fd, Node Exporter, and Docker/Podman
 # Docker is installed using the official get.docker.com script
 # OpenVPN auto-start is disabled after installation
 # Node Exporter auto-start can be enabled or disabled based on user preference
+# Node Exporter service file is automatically downloaded if not present locally
 # Supports: Ubuntu, Debian, CentOS (apt, dnf, yum)
 #
-# One-line execution (Note: For Node Exporter, download script first):
+# One-line execution:
 #   curl -fsSL https://raw.githubusercontent.com/JonasGao/initsys/main/install-openvpn-zerotier-docker.sh | bash
 #
-# Or download and execute (recommended for Node Exporter installation):
+# Or download and execute:
 #   curl -fsSL https://raw.githubusercontent.com/JonasGao/initsys/main/install-openvpn-zerotier-docker.sh -o install.sh
-#   curl -fsSL https://raw.githubusercontent.com/JonasGao/initsys/main/node_exporter.service -o node_exporter.service
 #   bash install.sh
 
 set -euo pipefail
@@ -99,6 +99,7 @@ echo ""
 echo "Package Manager: $PKG_MANAGER"
 echo "Vim: will be installed"
 echo "curl/wget: will be installed"
+echo "CLI tools: ripgrep, bat, fzf, fd will be installed"
 if [[ "$ENABLE_NODE_EXPORTER" =~ ^y$ ]]; then
     echo "Node Exporter: will be installed (auto-start enabled)"
 else
@@ -192,6 +193,42 @@ install_packages vim
 echo "=== Installing curl and wget ==="
 install_packages curl wget
 
+# Install additional CLI tools
+echo "=== Installing ripgrep, bat, fzf, and fd ==="
+case "$PKG_MANAGER" in
+    apt)
+        install_packages ripgrep bat fzf fd-find
+        # fd-find on Debian/Ubuntu installs as fdfind, create symlink
+        if command -v fdfind &>/dev/null && ! command -v fd &>/dev/null; then
+            $SUDO ln -sf "$(which fdfind)" /usr/local/bin/fd || true
+        fi
+        ;;
+    dnf|yum)
+        install_packages ripgrep bat fzf fd-find
+        ;;
+esac
+
+# Configure ripgrep alias
+echo "=== Configuring ripgrep alias ==="
+RG_ALIAS='alias rg="rg"'
+BASHRC_FILES=("/etc/bash.bashrc" "/etc/bashrc" "$HOME/.bashrc")
+ALIAS_ADDED=false
+
+for bashrc in "${BASHRC_FILES[@]}"; do
+    if [ -f "$bashrc" ]; then
+        if ! grep -q "alias rg=" "$bashrc" 2>/dev/null; then
+            echo "$RG_ALIAS" | $SUDO tee -a "$bashrc" >/dev/null || echo "$RG_ALIAS" >> "$bashrc" 2>/dev/null || true
+            ALIAS_ADDED=true
+            echo "Added rg alias to $bashrc"
+            break
+        fi
+    fi
+done
+
+if [ "$ALIAS_ADDED" = false ]; then
+    echo "Note: rg alias not added (ripgrep command is already available as 'rg')"
+fi
+
 # Install Node Exporter
 echo "=== Installing Node Exporter ==="
 
@@ -254,9 +291,25 @@ else
     echo "Node Exporter binary installed successfully to /usr/local/bin/node_exporter"
     
     # Install systemd service
+    SERVICE_FILE_URL="https://raw.githubusercontent.com/JonasGao/initsys/main/node_exporter.service"
+    
     if [ -f "$SCRIPT_DIR/node_exporter.service" ]; then
-        echo "Installing Node Exporter systemd service..."
+        echo "Installing Node Exporter systemd service from local file..."
         $SUDO cp "$SCRIPT_DIR/node_exporter.service" /etc/systemd/system/
+    else
+        echo "Local service file not found. Downloading from GitHub..."
+        if download_file "$SERVICE_FILE_URL" /tmp/node_exporter.service; then
+            echo "Installing Node Exporter systemd service from downloaded file..."
+            $SUDO mv /tmp/node_exporter.service /etc/systemd/system/
+        else
+            echo "Error: Failed to download node_exporter.service from $SERVICE_FILE_URL"
+            echo "Skipping systemd service installation."
+            echo "You can manually download the service file and install it later."
+        fi
+    fi
+    
+    # Only proceed if service file was installed
+    if [ -f /etc/systemd/system/node_exporter.service ]; then
         $SUDO systemctl daemon-reload
         
         if [[ "$ENABLE_NODE_EXPORTER" =~ ^y$ ]]; then
@@ -269,10 +322,6 @@ else
         else
             echo "=== Node Exporter installed but not started ==="
         fi
-    else
-        echo "Warning: node_exporter.service file not found in $SCRIPT_DIR"
-        echo "You can create a systemd service manually or download it from:"
-        echo "https://raw.githubusercontent.com/JonasGao/initsys/main/node_exporter.service"
     fi
 fi
 
@@ -406,6 +455,7 @@ echo "============================================"
 echo ""
 echo "Vim: installed"
 echo "curl/wget: installed"
+echo "CLI tools: ripgrep, bat, fzf, fd installed"
 if [[ "$ENABLE_NODE_EXPORTER" =~ ^y$ ]]; then
     echo "Node Exporter: installed and enabled"
 else
