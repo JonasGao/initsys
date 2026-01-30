@@ -315,15 +315,20 @@ if [[ "$TRUST_CUSTOM_CA" =~ ^y$ ]] && [ ${#CA_URLS[@]} -gt 0 ]; then
         for url in "${CA_URLS[@]}"; do
             echo "Downloading CA certificate from $url..."
             CA_FILENAME="custom-ca-${CA_INDEX}${CA_CERT_EXT}"
-            CA_TEMP_FILE="/tmp/${CA_FILENAME}"
+            CA_TEMP_FILE="$(mktemp "/tmp/${CA_FILENAME}.XXXXXX")"
             
             if download_file "$url" "$CA_TEMP_FILE"; then
                 # Basic validation: check if file contains certificate markers
                 if grep -q "BEGIN CERTIFICATE" "$CA_TEMP_FILE" 2>/dev/null; then
                     echo "Installing CA certificate as ${CA_FILENAME}..."
-                    $SUDO mv "$CA_TEMP_FILE" "${CA_CERT_DIR}/${CA_FILENAME}"
-                    $SUDO chmod 644 "${CA_CERT_DIR}/${CA_FILENAME}"
-                    CA_SUCCESS_COUNT=$((CA_SUCCESS_COUNT + 1))
+                    if $SUDO mv "$CA_TEMP_FILE" "${CA_CERT_DIR}/${CA_FILENAME}" && \
+                       $SUDO chmod 644 "${CA_CERT_DIR}/${CA_FILENAME}"; then
+                        CA_SUCCESS_COUNT=$((CA_SUCCESS_COUNT + 1))
+                    else
+                        echo "Warning: Failed to install CA certificate ${CA_FILENAME} from $url (mv/chmod failed)"
+                        # Attempt to clean up any partially installed file
+                        $SUDO rm -f "$CA_TEMP_FILE" "${CA_CERT_DIR}/${CA_FILENAME}" 2>/dev/null || true
+                    fi
                 else
                     echo "Warning: Downloaded file from $url does not appear to be a valid certificate"
                     rm -f "$CA_TEMP_FILE"
@@ -611,5 +616,5 @@ elif [ "$CONTAINER_RUNTIME" = "podman" ]; then
     echo "Podman: installed"
 fi
 if [[ "$TRUST_CUSTOM_CA" =~ ^y$ ]] && [ ${#CA_URLS[@]} -gt 0 ]; then
-    echo "Custom CA Certificates: installed and trusted ($CA_SUCCESS_COUNT of ${#CA_URLS[@]} certificate(s))"
+    echo "Custom CA Certificates: installed ($CA_SUCCESS_COUNT of ${#CA_URLS[@]} certificate(s)); see earlier log messages for trust store update status."
 fi
