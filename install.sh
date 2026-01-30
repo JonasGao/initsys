@@ -84,6 +84,21 @@ if [[ "$INSTALL_NODE_EXPORTER" =~ ^y$ ]]; then
     ENABLE_NODE_EXPORTER=$(echo "$ENABLE_NODE_EXPORTER" | tr '[:upper:]' '[:lower:]')
 fi
 
+# Custom CA certificates
+read -rp "Do you need to trust custom CA certificates? (y/n): " TRUST_CUSTOM_CA < /dev/tty
+TRUST_CUSTOM_CA=$(echo "$TRUST_CUSTOM_CA" | tr '[:upper:]' '[:lower:]')
+CA_URLS=()
+if [[ "$TRUST_CUSTOM_CA" =~ ^y$ ]]; then
+    echo "Enter CA certificate download URLs (one per line, empty line to finish):"
+    while true; do
+        read -rp "CA URL: " CA_URL < /dev/tty
+        if [ -z "$CA_URL" ]; then
+            break
+        fi
+        CA_URLS+=("$CA_URL")
+    done
+fi
+
 # Container runtime
 read -rp "Which container runtime do you want to install? (docker/podman/none): " CONTAINER_RUNTIME < /dev/tty
 CONTAINER_RUNTIME=$(echo "$CONTAINER_RUNTIME" | tr '[:upper:]' '[:lower:]')
@@ -143,6 +158,14 @@ elif [ "$CONTAINER_RUNTIME" = "podman" ]; then
     echo "Container Runtime: Podman"
 else
     echo "Container Runtime: none"
+fi
+if [[ "$TRUST_CUSTOM_CA" =~ ^y$ ]] && [ ${#CA_URLS[@]} -gt 0 ]; then
+    echo "Custom CA Certificates: will be downloaded and trusted"
+    for url in "${CA_URLS[@]}"; do
+        echo "  - $url"
+    done
+else
+    echo "Custom CA Certificates: none"
 fi
 echo ""
 echo "============================================"
@@ -239,6 +262,50 @@ done
 
 if [ "$ALIAS_ADDED" = false ]; then
     echo "Note: rg alias not added (ripgrep command is already available as 'rg')"
+fi
+
+# Install and trust custom CA certificates
+if [[ "$TRUST_CUSTOM_CA" =~ ^y$ ]] && [ ${#CA_URLS[@]} -gt 0 ]; then
+    echo "=== Installing custom CA certificates ==="
+    
+    # Determine CA certificate directory based on distro
+    case "$PKG_MANAGER" in
+        apt)
+            CA_CERT_DIR="/usr/local/share/ca-certificates"
+            UPDATE_CA_CMD="update-ca-certificates"
+            CA_CERT_EXT=".crt"
+            ;;
+        dnf|yum)
+            CA_CERT_DIR="/etc/pki/ca-trust/source/anchors"
+            UPDATE_CA_CMD="update-ca-trust"
+            CA_CERT_EXT=".crt"
+            ;;
+    esac
+    
+    # Create directory if it doesn't exist
+    $SUDO mkdir -p "$CA_CERT_DIR"
+    
+    # Download and install each CA certificate
+    CA_INDEX=1
+    for url in "${CA_URLS[@]}"; do
+        echo "Downloading CA certificate from $url..."
+        CA_FILENAME="custom-ca-${CA_INDEX}${CA_CERT_EXT}"
+        CA_TEMP_FILE="/tmp/${CA_FILENAME}"
+        
+        if download_file "$url" "$CA_TEMP_FILE"; then
+            echo "Installing CA certificate as ${CA_FILENAME}..."
+            $SUDO mv "$CA_TEMP_FILE" "${CA_CERT_DIR}/${CA_FILENAME}"
+            $SUDO chmod 644 "${CA_CERT_DIR}/${CA_FILENAME}"
+            ((CA_INDEX++))
+        else
+            echo "Warning: Failed to download CA certificate from $url"
+        fi
+    done
+    
+    # Update CA trust store
+    echo "Updating CA trust store..."
+    $SUDO $UPDATE_CA_CMD
+    echo "Custom CA certificates installed and trusted successfully."
 fi
 
 # Install Node Exporter
@@ -502,3 +569,7 @@ if [ "$CONTAINER_RUNTIME" = "docker" ]; then
 elif [ "$CONTAINER_RUNTIME" = "podman" ]; then
     echo "Podman: installed"
 fi
+if [[ "$TRUST_CUSTOM_CA" =~ ^y$ ]] && [ ${#CA_URLS[@]} -gt 0 ]; then
+    echo "Custom CA Certificates: installed and trusted (${#CA_URLS[@]} certificate(s))"
+fi
+echo ""
