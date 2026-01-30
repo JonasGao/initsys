@@ -1,10 +1,11 @@
 #!/bin/bash
-# Install OpenVPN, ZeroTier, Vim, curl, wget, ripgrep, bat, fzf, fd, Node Exporter, and Docker/Podman
+# Install OpenVPN, ZeroTier, Vim, curl, wget, ripgrep, bat, fzf, fd, Node Exporter, Docker/Podman, and custom CA certificates
 # Docker is installed using the official get.docker.com script
 # OpenVPN auto-start is disabled after installation
 # Node Exporter installation is optional and can be skipped
 # Node Exporter auto-start can be enabled or disabled based on user preference
 # Node Exporter service file is automatically downloaded if not present locally
+# Custom CA certificates can be downloaded and trusted automatically
 # Supports: Ubuntu, Debian, CentOS (apt, dnf, yum)
 #
 # One-line execution:
@@ -84,6 +85,38 @@ if [[ "$INSTALL_NODE_EXPORTER" =~ ^y$ ]]; then
     ENABLE_NODE_EXPORTER=$(echo "$ENABLE_NODE_EXPORTER" | tr '[:upper:]' '[:lower:]')
 fi
 
+# Custom CA certificates
+read -rp "Do you need to trust custom CA certificates? (y/n): " TRUST_CUSTOM_CA < /dev/tty
+TRUST_CUSTOM_CA=$(echo "$TRUST_CUSTOM_CA" | tr '[:upper:]' '[:lower:]')
+CA_URLS=()
+if [[ "$TRUST_CUSTOM_CA" =~ ^y$ ]]; then
+    echo "Enter CA certificate download URLs or local file paths (one per line, empty line to finish):"
+    echo "Note: Only HTTPS URLs are allowed for security. HTTP URLs will be rejected."
+    while true; do
+        read -rp "CA URL: " CA_URL < /dev/tty
+        if [ -z "$CA_URL" ]; then
+            break
+        fi
+        # Basic URL validation
+        if [[ "$CA_URL" =~ ^https:// ]]; then
+            CA_URLS+=("$CA_URL")
+        elif [[ "$CA_URL" =~ ^http:// ]]; then
+            echo "Warning: Insecure CA URL (http) is not allowed. Please use https:// or provide a local file path."
+        elif [ -f "$CA_URL" ]; then
+            # Accept local file paths
+            CA_URLS+=("$CA_URL")
+        else
+            echo "Warning: Invalid URL format or file not found. Please enter a valid HTTPS URL or local file path."
+        fi
+    done
+    
+    # Inform user if no URLs were provided
+    if [ ${#CA_URLS[@]} -eq 0 ]; then
+        echo "No CA certificate URLs provided. Skipping CA certificate installation."
+        TRUST_CUSTOM_CA="n"
+    fi
+fi
+
 # Container runtime
 read -rp "Which container runtime do you want to install? (docker/podman/none): " CONTAINER_RUNTIME < /dev/tty
 CONTAINER_RUNTIME=$(echo "$CONTAINER_RUNTIME" | tr '[:upper:]' '[:lower:]')
@@ -143,6 +176,14 @@ elif [ "$CONTAINER_RUNTIME" = "podman" ]; then
     echo "Container Runtime: Podman"
 else
     echo "Container Runtime: none"
+fi
+if [[ "$TRUST_CUSTOM_CA" =~ ^y$ ]] && [ ${#CA_URLS[@]} -gt 0 ]; then
+    echo "Custom CA Certificates: will be downloaded and trusted"
+    for url in "${CA_URLS[@]}"; do
+        echo "  - $url"
+    done
+else
+    echo "Custom CA Certificates: none"
 fi
 echo ""
 echo "============================================"
@@ -239,6 +280,123 @@ done
 
 if [ "$ALIAS_ADDED" = false ]; then
     echo "Note: rg alias not added (ripgrep command is already available as 'rg')"
+fi
+
+# Install and trust custom CA certificates
+if [[ "$TRUST_CUSTOM_CA" =~ ^y$ ]] && [ ${#CA_URLS[@]} -gt 0 ]; then
+    echo "=== Installing custom CA certificates ==="
+    
+    # Determine CA certificate directory based on distro
+    case "$PKG_MANAGER" in
+        apt)
+            CA_CERT_DIR="/usr/local/share/ca-certificates"
+            UPDATE_CA_CMD="update-ca-certificates"
+            CA_CERT_EXT=".crt"
+            ;;
+        dnf|yum)
+            CA_CERT_DIR="/etc/pki/ca-trust/source/anchors"
+            UPDATE_CA_CMD="update-ca-trust"
+            CA_CERT_EXT=".crt"
+            ;;
+        *)
+            echo "Error: Unsupported package manager for CA certificate installation."
+            echo "Skipping CA certificate installation."
+            TRUST_CUSTOM_CA="n"
+            ;;
+    esac
+    
+    # Only proceed if package manager is supported
+    if [[ "$TRUST_CUSTOM_CA" =~ ^y$ ]]; then
+        # Verify update command exists
+        if ! command -v "$UPDATE_CA_CMD" &>/dev/null; then
+            echo "Warning: $UPDATE_CA_CMD command not found. CA certificates may not be properly trusted."
+        fi
+        
+        # Create directory if it doesn't exist
+        $SUDO mkdir -p "$CA_CERT_DIR"
+        
+        # Download and install each CA certificate
+        CA_INDEX=1
+        CA_SUCCESS_COUNT=0
+        for url in "${CA_URLS[@]}"; do
+            CA_FILENAME="custom-ca-${CA_INDEX}${CA_CERT_EXT}"
+            CA_TEMP_FILE="$(mktemp "/tmp/${CA_FILENAME}.XXXXXX")"
+            
+            # Determine how to obtain the CA certificate:
+            # - https:// URL: download securely
+            # - otherwise: treat as local file path
+            OBTAIN_SUCCESS=false
+            if [[ "$url" =~ ^https:// ]]; then
+                echo "Downloading CA certificate from $url..."
+                if download_file "$url" "$CA_TEMP_FILE"; then
+                    OBTAIN_SUCCESS=true
+                else
+                    echo "Warning: Failed to download CA certificate from $url"
+                fi
+            else
+                # Treat as local file path
+                if [ -f "$url" ]; then
+                    echo "Using local CA certificate file $url..."
+                    if cp "$url" "$CA_TEMP_FILE"; then
+                        OBTAIN_SUCCESS=true
+                    else
+                        echo "Warning: Failed to copy CA certificate from $url"
+                    fi
+                else
+                    echo "Warning: CA source is not an existing local file: $url"
+                fi
+            fi
+            
+            if [ "$OBTAIN_SUCCESS" = true ]; then
+                # Validate certificate: prefer openssl parse check, fall back to marker check
+                CERT_VALID=false
+                if command -v openssl >/dev/null 2>&1; then
+                    if openssl x509 -noout -in "$CA_TEMP_FILE" >/dev/null 2>&1; then
+                        CERT_VALID=true
+                    else
+                        echo "Warning: Obtained file from $url is not a valid X.509 certificate"
+                    fi
+                else
+                    # Fallback basic validation: check if file contains certificate markers
+                    if grep -q "BEGIN CERTIFICATE" "$CA_TEMP_FILE" 2>/dev/null; then
+                        CERT_VALID=true
+                    else
+                        echo "Warning: Obtained file from $url does not appear to be a valid certificate"
+                    fi
+                fi
+                
+                if [ "$CERT_VALID" = true ]; then
+                    echo "Installing CA certificate as ${CA_FILENAME}..."
+                    if $SUDO mv "$CA_TEMP_FILE" "${CA_CERT_DIR}/${CA_FILENAME}" && \
+                       $SUDO chmod 644 "${CA_CERT_DIR}/${CA_FILENAME}"; then
+                        CA_SUCCESS_COUNT=$((CA_SUCCESS_COUNT + 1))
+                    else
+                        echo "Warning: Failed to install CA certificate ${CA_FILENAME} from $url (mv/chmod failed)"
+                        # Attempt to clean up any partially installed file
+                        $SUDO rm -f "$CA_TEMP_FILE" "${CA_CERT_DIR}/${CA_FILENAME}" 2>/dev/null || true
+                    fi
+                else
+                    rm -f "$CA_TEMP_FILE"
+                fi
+            else
+                rm -f "$CA_TEMP_FILE" 2>/dev/null || true
+            fi
+            CA_INDEX=$((CA_INDEX + 1))
+        done
+        
+        # Update CA trust store if certificates were installed
+        if [ $CA_SUCCESS_COUNT -gt 0 ]; then
+            echo "Updating CA trust store..."
+            if $SUDO $UPDATE_CA_CMD; then
+                echo "Custom CA certificates installed and trusted successfully ($CA_SUCCESS_COUNT of ${#CA_URLS[@]} certificate(s))."
+            else
+                echo "Warning: Failed to update CA trust store. Certificates were installed but may not be trusted."
+            fi
+        else
+            echo "No CA certificates were successfully installed."
+            TRUST_CUSTOM_CA="n"
+        fi
+    fi
 fi
 
 # Install Node Exporter
@@ -501,4 +659,7 @@ if [ "$CONTAINER_RUNTIME" = "docker" ]; then
     echo "Note: You may need to log out and back in for docker group changes to take effect."
 elif [ "$CONTAINER_RUNTIME" = "podman" ]; then
     echo "Podman: installed"
+fi
+if [[ "$TRUST_CUSTOM_CA" =~ ^y$ ]] && [ ${#CA_URLS[@]} -gt 0 ]; then
+    echo "Custom CA Certificates: installed ($CA_SUCCESS_COUNT of ${#CA_URLS[@]} certificate(s)); see earlier log messages for trust store update status."
 fi
