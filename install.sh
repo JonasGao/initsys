@@ -90,17 +90,23 @@ read -rp "Do you need to trust custom CA certificates? (y/n): " TRUST_CUSTOM_CA 
 TRUST_CUSTOM_CA=$(echo "$TRUST_CUSTOM_CA" | tr '[:upper:]' '[:lower:]')
 CA_URLS=()
 if [[ "$TRUST_CUSTOM_CA" =~ ^y$ ]]; then
-    echo "Enter CA certificate download URLs (one per line, empty line to finish):"
+    echo "Enter CA certificate download URLs or local file paths (one per line, empty line to finish):"
+    echo "Note: Only HTTPS URLs are allowed for security. HTTP URLs will be rejected."
     while true; do
         read -rp "CA URL: " CA_URL < /dev/tty
         if [ -z "$CA_URL" ]; then
             break
         fi
         # Basic URL validation
-        if [[ "$CA_URL" =~ ^https?:// ]]; then
+        if [[ "$CA_URL" =~ ^https:// ]]; then
+            CA_URLS+=("$CA_URL")
+        elif [[ "$CA_URL" =~ ^http:// ]]; then
+            echo "Warning: Insecure CA URL (http) is not allowed. Please use https:// or provide a local file path."
+        elif [ -f "$CA_URL" ]; then
+            # Accept local file paths
             CA_URLS+=("$CA_URL")
         else
-            echo "Warning: Invalid URL format. Please enter a valid HTTP/HTTPS URL."
+            echo "Warning: Invalid URL format or file not found. Please enter a valid HTTPS URL or local file path."
         fi
     done
     
@@ -313,13 +319,53 @@ if [[ "$TRUST_CUSTOM_CA" =~ ^y$ ]] && [ ${#CA_URLS[@]} -gt 0 ]; then
         CA_INDEX=1
         CA_SUCCESS_COUNT=0
         for url in "${CA_URLS[@]}"; do
-            echo "Downloading CA certificate from $url..."
             CA_FILENAME="custom-ca-${CA_INDEX}${CA_CERT_EXT}"
             CA_TEMP_FILE="$(mktemp "/tmp/${CA_FILENAME}.XXXXXX")"
             
-            if download_file "$url" "$CA_TEMP_FILE"; then
-                # Basic validation: check if file contains certificate markers
-                if grep -q "BEGIN CERTIFICATE" "$CA_TEMP_FILE" 2>/dev/null; then
+            # Determine how to obtain the CA certificate:
+            # - https:// URL: download securely
+            # - otherwise: treat as local file path
+            OBTAIN_SUCCESS=false
+            if [[ "$url" =~ ^https:// ]]; then
+                echo "Downloading CA certificate from $url..."
+                if download_file "$url" "$CA_TEMP_FILE"; then
+                    OBTAIN_SUCCESS=true
+                else
+                    echo "Warning: Failed to download CA certificate from $url"
+                fi
+            else
+                # Treat as local file path
+                if [ -f "$url" ]; then
+                    echo "Using local CA certificate file $url..."
+                    if cp "$url" "$CA_TEMP_FILE"; then
+                        OBTAIN_SUCCESS=true
+                    else
+                        echo "Warning: Failed to copy CA certificate from $url"
+                    fi
+                else
+                    echo "Warning: CA source is not an existing local file: $url"
+                fi
+            fi
+            
+            if [ "$OBTAIN_SUCCESS" = true ]; then
+                # Validate certificate: prefer openssl parse check, fall back to marker check
+                CERT_VALID=false
+                if command -v openssl >/dev/null 2>&1; then
+                    if openssl x509 -noout -in "$CA_TEMP_FILE" >/dev/null 2>&1; then
+                        CERT_VALID=true
+                    else
+                        echo "Warning: Obtained file from $url is not a valid X.509 certificate"
+                    fi
+                else
+                    # Fallback basic validation: check if file contains certificate markers
+                    if grep -q "BEGIN CERTIFICATE" "$CA_TEMP_FILE" 2>/dev/null; then
+                        CERT_VALID=true
+                    else
+                        echo "Warning: Obtained file from $url does not appear to be a valid certificate"
+                    fi
+                fi
+                
+                if [ "$CERT_VALID" = true ]; then
                     echo "Installing CA certificate as ${CA_FILENAME}..."
                     if $SUDO mv "$CA_TEMP_FILE" "${CA_CERT_DIR}/${CA_FILENAME}" && \
                        $SUDO chmod 644 "${CA_CERT_DIR}/${CA_FILENAME}"; then
@@ -330,11 +376,10 @@ if [[ "$TRUST_CUSTOM_CA" =~ ^y$ ]] && [ ${#CA_URLS[@]} -gt 0 ]; then
                         $SUDO rm -f "$CA_TEMP_FILE" "${CA_CERT_DIR}/${CA_FILENAME}" 2>/dev/null || true
                     fi
                 else
-                    echo "Warning: Downloaded file from $url does not appear to be a valid certificate"
                     rm -f "$CA_TEMP_FILE"
                 fi
             else
-                echo "Warning: Failed to download CA certificate from $url"
+                rm -f "$CA_TEMP_FILE" 2>/dev/null || true
             fi
             CA_INDEX=$((CA_INDEX + 1))
         done
