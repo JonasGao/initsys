@@ -433,11 +433,11 @@ if [[ "$INSTALL_NODE_EXPORTER" =~ ^y$ ]]; then
         local api_url="https://api.github.com/repos/prometheus/node_exporter/releases/latest"
         local default_version="1.10.2"
 
-        echo "Detecting latest Node Exporter version from GitHub releases..."
+        echo "Detecting latest Node Exporter version from GitHub releases..." >&2
 
         local response
         if ! response=$(curl -fsSL "$api_url" 2>/dev/null); then
-            echo "Warning: Failed to query GitHub API for latest node_exporter release. Falling back to v${default_version}."
+            echo "Warning: Failed to query GitHub API for latest node_exporter release. Falling back to v${default_version}." >&2
             echo "$default_version"
             return 0
         fi
@@ -446,7 +446,7 @@ if [[ "$INSTALL_NODE_EXPORTER" =~ ^y$ ]]; then
         version=$(printf '%s\n' "$response" | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/' || true)
 
         if [ -z "$version" ]; then
-            echo "Warning: Could not parse latest node_exporter version from GitHub API response. Falling back to v${default_version}."
+            echo "Warning: Could not parse latest node_exporter version from GitHub API response. Falling back to v${default_version}." >&2
             echo "$default_version"
         else
             echo "$version"
