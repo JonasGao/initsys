@@ -228,10 +228,11 @@ install_packages() {
 download_file() {
     local url="$1"
     local output="$2"
+    echo "Downloading $url ..."
     if command -v curl &>/dev/null; then
-        curl -fsSL "$url" -o "$output"
+        curl -fSL --progress-bar "$url" -o "$output"
     elif command -v wget &>/dev/null; then
-        wget -q "$url" -O "$output"
+        wget --progress=dot:giga "$url" -O "$output"
     else
         echo "Error: Neither curl nor wget is available."
         return 1
@@ -514,7 +515,7 @@ fi
 
 # Install ZeroTier
 echo "=== Installing ZeroTier ==="
-curl -fsSL https://install.zerotier.com -o /tmp/install-zerotier.sh
+download_file "https://install.zerotier.com" "/tmp/install-zerotier.sh"
 $SUDO bash /tmp/install-zerotier.sh
 rm /tmp/install-zerotier.sh
 
@@ -590,7 +591,7 @@ elif [ "$CONTAINER_RUNTIME" = "docker" ]; then
         docker --version
         DOCKER_ALREADY_INSTALLED=true
     else
-        curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
+        download_file "https://get.docker.com" "/tmp/get-docker.sh"
         $SUDO sh /tmp/get-docker.sh
         rm /tmp/get-docker.sh
     fi

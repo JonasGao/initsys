@@ -61,10 +61,11 @@ install_packages() {
 download_file() {
     local url="$1"
     local output="$2"
+    echo "Downloading $url ..."
     if command -v curl &>/dev/null; then
-        curl -fsSL "$url" -o "$output"
+        curl -fSL --progress-bar "$url" -o "$output"
     elif command -v wget &>/dev/null; then
-        wget -q "$url" -O "$output"
+        wget --progress=dot:giga "$url" -O "$output"
     else
         echo "Error: Neither curl nor wget is available."
         return 1
