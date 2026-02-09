@@ -140,7 +140,7 @@ echo ""
 echo "Package Manager: $PKG_MANAGER"
 echo "Vim: will be installed"
 echo "curl/wget: will be installed"
-echo "CLI tools: ripgrep, bat, fzf, fd will be installed"
+echo "CLI tools: ripgrep, bat, fzf, fd, zoxide will be installed"
 if [[ "$INSTALL_NODE_EXPORTER" =~ ^y$ ]]; then
     if [[ "$ENABLE_NODE_EXPORTER" =~ ^y$ ]]; then
         echo "Node Exporter: will be installed (auto-start enabled)"
@@ -248,10 +248,15 @@ echo "=== Installing curl and wget ==="
 install_packages curl wget
 
 # Install additional CLI tools
-echo "=== Installing ripgrep, bat, fzf, and fd ==="
+echo "=== Installing ripgrep, bat, fzf, fd, and zoxide ==="
 case "$PKG_MANAGER" in
     apt)
         install_packages ripgrep bat fzf fd-find
+        # Install zoxide for apt-based systems
+        if ! command -v zoxide &>/dev/null; then
+            echo "Installing zoxide..."
+            curl -sS https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | bash
+        fi
         # fd-find on Debian/Ubuntu installs as fdfind, create symlink
         if command -v fdfind &>/dev/null && ! command -v fd &>/dev/null; then
             $SUDO ln -sf "$(which fdfind)" /usr/local/bin/fd || true
@@ -259,6 +264,11 @@ case "$PKG_MANAGER" in
         ;;
     dnf|yum)
         install_packages ripgrep bat fzf fd-find
+        # Install zoxide for dnf/yum-based systems
+        if ! command -v zoxide &>/dev/null; then
+            echo "Installing zoxide..."
+            curl -sS https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | bash
+        fi
         ;;
 esac
 
@@ -648,7 +658,7 @@ echo "============================================"
 echo ""
 echo "Vim: installed"
 echo "curl/wget: installed"
-echo "CLI tools: ripgrep, bat, fzf, fd installed"
+echo "CLI tools: ripgrep, bat, fzf, fd, zoxide installed"
 if [[ "$INSTALL_NODE_EXPORTER" =~ ^y$ ]]; then
     if [[ "$ENABLE_NODE_EXPORTER" =~ ^y$ ]]; then
         echo "Node Exporter: installed and enabled"
