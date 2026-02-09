@@ -63,7 +63,7 @@ download_file() {
     local output="$2"
     echo "Downloading $url ..."
     if command -v curl &>/dev/null; then
-        curl -fSL --progress-bar "$url" -o "$output"
+        curl -L --progress-bar "$url" -o "$output"
     elif command -v wget &>/dev/null; then
         wget --progress=dot:giga "$url" -O "$output"
     else
