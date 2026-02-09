@@ -136,12 +136,32 @@ case "$ARCH" in
         ;;
 esac
 
-# Get latest version of node_exporter
-NODE_EXPORTER_VERSION=$(curl -s https://api.github.com/repos/prometheus/node_exporter/releases/latest | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/')
-if [ -z "$NODE_EXPORTER_VERSION" ]; then
-    echo "Warning: Could not detect latest version. Using v1.7.0 as default."
-    NODE_EXPORTER_VERSION="1.7.0"
-fi
+# Get latest version of node_exporter with fallback on failure
+get_latest_node_exporter_version() {
+    local api_url="https://api.github.com/repos/prometheus/node_exporter/releases/latest"
+    local default_version="1.10.2"
+
+    echo "Detecting latest Node Exporter version from GitHub releases..."
+
+    local response
+    if ! response=$(curl -fsSL "$api_url" 2>/dev/null); then
+        echo "Warning: Failed to query GitHub API for latest node_exporter release. Falling back to v${default_version}."
+        echo "$default_version"
+        return 0
+    fi
+
+    local version
+    version=$(printf '%s\n' "$response" | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/' || true)
+
+    if [ -z "$version" ]; then
+        echo "Warning: Could not parse latest node_exporter version from GitHub API response. Falling back to v${default_version}."
+        echo "$default_version"
+    else
+        echo "$version"
+    fi
+}
+
+NODE_EXPORTER_VERSION="$(get_latest_node_exporter_version)"
 
 echo "Installing Node Exporter version $NODE_EXPORTER_VERSION for architecture $NODE_EXPORTER_ARCH..."
 
