@@ -30,7 +30,7 @@ get_latest_delta_version() {
 
     local response
     if ! response=$(curl -fsSL "$api_url" 2>/dev/null); then
-        echo "Warning: Failed to query GitHub API for latest delta release. Falling back to v${default_version}."
+        echo "Warning: Failed to query GitHub API for latest delta release. Falling back to v${default_version}." >&2
         echo "$default_version"
         return 0
     fi
@@ -39,7 +39,7 @@ get_latest_delta_version() {
     version=$(printf '%s\n' "$response" | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/' || true)
 
     if [ -z "$version" ]; then
-        echo "Warning: Could not parse latest delta version from GitHub API response. Falling back to v${default_version}."
+        echo "Warning: Could not parse latest delta version from GitHub API response. Falling back to v${default_version}." >&2
         echo "$default_version"
     else
         echo "$version"
@@ -107,7 +107,7 @@ get_latest_fzf_version() {
 
     local response
     if ! response=$(curl -fsSL "$api_url" 2>/dev/null); then
-        echo "Warning: Failed to query GitHub API for latest fzf release. Falling back to v${default_version}."
+        echo "Warning: Failed to query GitHub API for latest fzf release. Falling back to v${default_version}." >&2
         echo "$default_version"
         return 0
     fi
@@ -116,7 +116,7 @@ get_latest_fzf_version() {
     version=$(printf '%s\n' "$response" | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/' || true)
 
     if [ -z "$version" ]; then
-        echo "Warning: Could not parse latest fzf version from GitHub API response. Falling back to v${default_version}."
+        echo "Warning: Could not parse latest fzf version from GitHub API response. Falling back to v${default_version}." >&2
         echo "$default_version"
     else
         echo "$version"
