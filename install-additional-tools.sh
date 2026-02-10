@@ -268,45 +268,56 @@ esac
 # Install fzf from GitHub release
 install_fzf
 
-# Configure ripgrep alias
-echo "=== Configuring ripgrep alias ==="
+# Configure ripgrep alias in bash_aliases
+echo "=== Configuring ripgrep alias in bash_aliases ==="
 RG_ALIAS='alias rg="rg"'
-BASHRC_FILES=("/etc/bash.bashrc" "/etc/bashrc" "$HOME/.bashrc")
+BASH_ALIASES_FILE="$HOME/.bash_aliases"
 ALIAS_ADDED=false
 
-for bashrc in "${BASHRC_FILES[@]}"; do
-    if [ -f "$bashrc" ]; then
-        if ! grep -q "alias rg=" "$bashrc" 2>/dev/null; then
-            echo "$RG_ALIAS" | $SUDO tee -a "$bashrc" >/dev/null || echo "$RG_ALIAS" >> "$bashrc" 2>/dev/null || true
-            ALIAS_ADDED=true
-            echo "Added rg alias to $bashrc"
-            break
-        fi
-    fi
-done
-
-if [ "$ALIAS_ADDED" = false ]; then
-    echo "Note: rg alias not added (ripgrep command is already available as 'rg')"
+# Create bash_aliases if it doesn't exist
+if [ ! -f "$BASH_ALIASES_FILE" ]; then
+    echo "Creating $BASH_ALIASES_FILE..."
+    touch "$BASH_ALIASES_FILE"
+    chmod 644 "$BASH_ALIASES_FILE"
 fi
 
-# Add fzf setup to bashrc using eval "$(fzf --bash)"
-echo "=== Adding fzf setup to bashrc using eval \"\$(fzf --bash)\" ==="
+# Add rg alias to bash_aliases if not already present
+if ! grep -q "alias rg=" "$BASH_ALIASES_FILE" 2>/dev/null; then
+    echo "$RG_ALIAS" >> "$BASH_ALIASES_FILE"
+    ALIAS_ADDED=true
+    echo "Added rg alias to $BASH_ALIASES_FILE"
+else
+    echo "rg alias already exists in $BASH_ALIASES_FILE"
+fi
+
+if [ "$ALIAS_ADDED" = false ]; then
+    echo "Note: rg alias not added (already exists or bash_aliases not accessible)"
+fi
+
+# Add fzf setup to user scope bashrc using eval "$(fzf --bash)"
+echo "=== Adding fzf setup to user scope bashrc using eval \"\$(fzf --bash)\" ==="
+USER_BASHRC="$HOME/.bashrc"
 FZF_SETUP_ADDED=false
 
-for bashrc in "${BASHRC_FILES[@]}"; do
-    if [ -f "$bashrc" ]; then
-        if ! grep -q "eval \"\$(fzf --bash)\"" "$bashrc" 2>/dev/null; then
-            echo "# Setup fzf" | $SUDO tee -a "$bashrc" >/dev/null || echo "# Setup fzf" >> "$bashrc" 2>/dev/null || true
-            echo "eval \"\$(fzf --bash)\"" | $SUDO tee -a "$bashrc" >/dev/null || echo "eval \"\$(fzf --bash)\"" >> "$bashrc" 2>/dev/null || true
-            FZF_SETUP_ADDED=true
-            echo "Added fzf setup to $bashrc using eval \"\$(fzf --bash)\""
-        fi
-        break
-    fi
-done
+# Ensure user bashrc exists
+if [ ! -f "$USER_BASHRC" ]; then
+    echo "Creating $USER_BASHRC..."
+    touch "$USER_BASHRC"
+    chmod 644 "$USER_BASHRC"
+fi
+
+# Add fzf setup to user bashrc if not already present
+if ! grep -q "eval \"\$(fzf --bash)\"" "$USER_BASHRC" 2>/dev/null; then
+    echo "# Setup fzf" >> "$USER_BASHRC"
+    echo "eval \"\$(fzf --bash)\"" >> "$USER_BASHRC"
+    FZF_SETUP_ADDED=true
+    echo "Added fzf setup to $USER_BASHRC using eval \"\$(fzf --bash)\""
+else
+    echo "fzf setup already present in $USER_BASHRC"
+fi
 
 if [ "$FZF_SETUP_ADDED" = false ]; then
-    echo "Note: fzf setup already present in bashrc"
+    echo "Note: fzf setup already present in user bashrc"
 fi
 
 echo ""
