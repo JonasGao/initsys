@@ -1,5 +1,5 @@
 #!/bin/bash
-# Install OpenVPN, ZeroTier, Vim, curl, wget, ripgrep, bat, fzf, fd, Node Exporter, Docker/Podman, and custom CA certificates
+# Install OpenVPN, ZeroTier, Vim, curl, wget, ripgrep, bat, fzf, fd, delta, Node Exporter, Docker/Podman, and custom CA certificates
 # Docker is installed using the official get.docker.com script
 # OpenVPN auto-start is disabled after installation
 # Node Exporter installation is optional and can be skipped
@@ -140,7 +140,7 @@ echo ""
 echo "Package Manager: $PKG_MANAGER"
 echo "Vim: will be installed"
 echo "curl/wget: will be installed"
-echo "CLI tools: ripgrep, bat, fzf, fd, zoxide will be installed"
+echo "CLI tools: ripgrep, bat, fzf, fd, zoxide, delta will be installed"
 if [[ "$INSTALL_NODE_EXPORTER" =~ ^y$ ]]; then
     if [[ "$ENABLE_NODE_EXPORTER" =~ ^y$ ]]; then
         echo "Node Exporter: will be installed (auto-start enabled)"
@@ -248,10 +248,10 @@ echo "=== Installing curl and wget ==="
 install_packages curl wget
 
 # Install additional CLI tools
-echo "=== Installing ripgrep, bat, fzf, fd, and zoxide ==="
+echo "=== Installing ripgrep, bat, fzf, fd, zoxide, and delta ==="
 case "$PKG_MANAGER" in
     apt)
-        install_packages ripgrep bat fzf fd-find
+        install_packages ripgrep bat fzf fd-find git-delta
         # Install zoxide for apt-based systems
         if ! command -v zoxide &>/dev/null; then
             echo "Installing zoxide..."
@@ -263,7 +263,7 @@ case "$PKG_MANAGER" in
         fi
         ;;
     dnf|yum)
-        install_packages ripgrep bat fzf fd-find
+        install_packages ripgrep bat fzf fd-find git-delta
         # Install zoxide for dnf/yum-based systems
         if ! command -v zoxide &>/dev/null; then
             echo "Installing zoxide..."
