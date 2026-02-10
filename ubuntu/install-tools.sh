@@ -36,7 +36,7 @@ get_latest_delta_version() {
     fi
 
     local version
-    version=$(printf '%s\n' "$response" | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/' || true)
+    version=$(printf '%s\n' "$response" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/' | sed -E 's/^v//' || true)
 
     if [ -z "$version" ]; then
         echo "Warning: Could not parse latest delta version from GitHub API response. Falling back to v${default_version}." >&2
@@ -71,7 +71,7 @@ install_delta_deb() {
     echo "Installing delta version $DELTA_VERSION for architecture $DELTA_ARCH..."
     
     # Download .deb file
-    DELTA_DEB_URL="https://github.com/dandavison/delta/releases/download/${DELTA_VERSION}/git-delta_${DELTA_VERSION}_${DELTA_ARCH}.deb"
+    DELTA_DEB_URL="https://github.com/dandavison/delta/releases/download/v${DELTA_VERSION}/git-delta_${DELTA_VERSION}_${DELTA_ARCH}.deb"
     DELTA_TEMP_DEB=$(mktemp /tmp/delta_XXXXXX.deb)
     
     if download_file "$DELTA_DEB_URL" "$DELTA_TEMP_DEB"; then
@@ -113,7 +113,7 @@ get_latest_fzf_version() {
     fi
 
     local version
-    version=$(printf '%s\n' "$response" | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/' || true)
+    version=$(printf '%s\n' "$response" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/' | sed -E 's/^v//' || true)
 
     if [ -z "$version" ]; then
         echo "Warning: Could not parse latest fzf version from GitHub API response. Falling back to v${default_version}." >&2
