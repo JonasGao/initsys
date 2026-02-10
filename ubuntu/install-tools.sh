@@ -36,7 +36,8 @@ get_latest_delta_version() {
     fi
 
     local version
-    version=$(printf '%s\n' "$response" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/' | sed -E 's/^v//' || true)
+    # Use Python for more robust JSON parsing
+    version=$(echo "$response" | python3 -c "import json, sys; print(json.load(sys.stdin)['tag_name'].lstrip('v'))" 2>/dev/null || true)
 
     if [ -z "$version" ]; then
         echo "Warning: Could not parse latest delta version from GitHub API response. Falling back to v${default_version}." >&2
@@ -113,7 +114,8 @@ get_latest_fzf_version() {
     fi
 
     local version
-    version=$(printf '%s\n' "$response" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/' | sed -E 's/^v//' || true)
+    # Use Python for more robust JSON parsing
+    version=$(echo "$response" | python3 -c "import json, sys; print(json.load(sys.stdin)['tag_name'].lstrip('v'))" 2>/dev/null || true)
 
     if [ -z "$version" ]; then
         echo "Warning: Could not parse latest fzf version from GitHub API response. Falling back to v${default_version}." >&2
