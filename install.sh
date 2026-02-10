@@ -315,6 +315,94 @@ install_delta_deb() {
     fi
 }
 
+# Install fzf from GitHub release
+install_fzf() {
+    echo "=== Installing fzf from GitHub release ==="
+    
+    # Detect system architecture
+    ARCH=$(uname -m)
+    case "$ARCH" in
+        x86_64)
+            FZF_ARCH="linux_amd64"
+            ;;
+        aarch64|arm64)
+            FZF_ARCH="linux_arm64"
+            ;;
+        *)
+            echo "Warning: Unsupported architecture $ARCH for fzf. Skipping fzf installation."
+            return 1
+            ;;
+    esac
+    
+    # Get latest version of fzf with fallback on failure
+    get_latest_fzf_version() {
+        local api_url="https://api.github.com/repos/junegunn/fzf/releases/latest"
+        local default_version="0.56.0"
+
+        local response
+        if ! response=$(curl -fsSL "$api_url" 2>/dev/null); then
+            echo "Warning: Failed to query GitHub API for latest fzf release. Falling back to v${default_version}."
+            echo "$default_version"
+            return 0
+        fi
+
+        local version
+        version=$(printf '%s\n' "$response" | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/' || true)
+
+        if [ -z "$version" ]; then
+            echo "Warning: Could not parse latest fzf version from GitHub API response. Falling back to v${default_version}."
+            echo "$default_version"
+        else
+            echo "$version"
+        fi
+    }
+
+    FZF_VERSION="$(get_latest_fzf_version)"
+    
+    echo "Installing fzf version $FZF_VERSION for architecture $FZF_ARCH..."
+    
+    # Download fzf
+    FZF_URL="https://github.com/junegunn/fzf/releases/download/v${FZF_VERSION}/fzf-${FZF_VERSION}-${FZF_ARCH}.tar.gz"
+    FZF_TEMP_FILE=$(mktemp /tmp/fzf_XXXXXX.tar.gz)
+    
+    if download_file "$FZF_URL" "$FZF_TEMP_FILE"; then
+        # Extract fzf
+        FZF_TEMP_DIR=$(mktemp -d /tmp/fzf_XXXXXX)
+        tar xzf "$FZF_TEMP_FILE" -C "$FZF_TEMP_DIR"
+        
+        # Install fzf
+        if $SUDO mv "$FZF_TEMP_DIR/fzf" /usr/local/bin/ && \
+           $SUDO chmod +x /usr/local/bin/fzf; then
+            echo "fzf installed successfully from GitHub release"
+            
+            # Install fzf key bindings and completion
+            if [ -d "$HOME/.fzf" ]; then
+                echo "fzf configuration directory already exists, skipping setup"
+            else
+                echo "Installing fzf key bindings and completion..."
+                # Run fzf's setup script
+                if "$FZF_TEMP_DIR/install" --key-bindings --completion --no-update-rc; then
+                    echo "fzf key bindings and completion installed successfully"
+                else
+                    echo "Warning: Failed to install fzf key bindings and completion"
+                fi
+            fi
+            
+            # Clean up
+            rm -rf "$FZF_TEMP_FILE" "$FZF_TEMP_DIR"
+            return 0
+        else
+            echo "Warning: Failed to install fzf"
+            rm -rf "$FZF_TEMP_FILE" "$FZF_TEMP_DIR"
+            return 1
+        fi
+    else
+        echo "Warning: Failed to download fzf from $FZF_URL"
+        rm -f "$FZF_TEMP_FILE"
+        return 1
+    fi
+}
+
 # Install Vim
 echo "=== Installing Vim ==="
 install_packages vim
@@ -324,10 +412,10 @@ echo "=== Installing curl and wget ==="
 install_packages curl wget
 
 # Install additional CLI tools
-echo "=== Installing ripgrep, bat, fzf, fd, zoxide, and delta ==="
+echo "=== Installing ripgrep, bat, fd, zoxide, and delta ==="
 case "$PKG_MANAGER" in
     apt)
-        install_packages ripgrep bat fzf fd-find
+        install_packages ripgrep bat fd-find
         # Install delta from .deb file
         install_delta_deb
         # Install zoxide for apt-based systems
@@ -341,7 +429,7 @@ case "$PKG_MANAGER" in
         fi
         ;;
     dnf|yum)
-        install_packages ripgrep bat fzf fd-find git-delta
+        install_packages ripgrep bat fd-find git-delta
         # Install zoxide for dnf/yum-based systems
         if ! command -v zoxide &>/dev/null; then
             echo "Installing zoxide..."
@@ -349,6 +437,9 @@ case "$PKG_MANAGER" in
         fi
         ;;
 esac
+
+# Install fzf from GitHub release
+install_fzf
 
 # Configure ripgrep alias
 echo "=== Configuring ripgrep alias ==="
