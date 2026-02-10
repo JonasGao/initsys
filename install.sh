@@ -239,6 +239,82 @@ download_file() {
     fi
 }
 
+# Install delta from .deb file
+install_delta_deb() {
+    echo "=== Installing delta (git-delta) from .deb package ==="
+    
+    # Detect system architecture
+    ARCH=$(uname -m)
+    case "$ARCH" in
+        x86_64)
+            DELTA_ARCH="amd64"
+            ;;
+        aarch64|arm64)
+            DELTA_ARCH="arm64"
+            ;;
+        *)
+            echo "Warning: Unsupported architecture $ARCH for delta. Skipping delta installation."
+            return 1
+            ;;
+    esac
+    
+    # Get latest version of delta with fallback on failure
+    get_latest_delta_version() {
+        local api_url="https://api.github.com/repos/dandavison/delta/releases/latest"
+        local default_version="0.18.2"
+
+        local response
+        if ! response=$(curl -fsSL "$api_url" 2>/dev/null); then
+            echo "Warning: Failed to query GitHub API for latest delta release. Falling back to v${default_version}."
+            echo "$default_version"
+            return 0
+        fi
+
+        local version
+        version=$(printf '%s\n' "$response" | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/' || true)
+
+        if [ -z "$version" ]; then
+            echo "Warning: Could not parse latest delta version from GitHub API response. Falling back to v${default_version}."
+            echo "$default_version"
+        else
+            echo "$version"
+        fi
+    }
+
+    DELTA_VERSION="$(get_latest_delta_version)"
+    
+    echo "Installing delta version $DELTA_VERSION for architecture $DELTA_ARCH..."
+    
+    # Download .deb file
+    DELTA_DEB_URL="https://github.com/dandavison/delta/releases/download/${DELTA_VERSION}/git-delta_${DELTA_VERSION}_${DELTA_ARCH}.deb"
+    DELTA_TEMP_DEB=$(mktemp /tmp/delta_XXXXXX.deb)
+    
+    if download_file "$DELTA_DEB_URL" "$DELTA_TEMP_DEB"; then
+        # Install .deb file
+        if $SUDO dpkg -i "$DELTA_TEMP_DEB"; then
+            echo "Delta installed successfully from .deb package"
+            rm -f "$DELTA_TEMP_DEB"
+            return 0
+        else
+            echo "Warning: Failed to install delta .deb package. Trying to fix dependencies..."
+            $SUDO apt-get install -f -y
+            if $SUDO dpkg -i "$DELTA_TEMP_DEB"; then
+                echo "Delta installed successfully after fixing dependencies"
+                rm -f "$DELTA_TEMP_DEB"
+                return 0
+            else
+                echo "Warning: Failed to install delta .deb package."
+                rm -f "$DELTA_TEMP_DEB"
+                return 1
+            fi
+        fi
+    else
+        echo "Warning: Failed to download delta .deb file from $DELTA_DEB_URL."
+        rm -f "$DELTA_TEMP_DEB"
+        return 1
+    fi
+}
+
 # Install Vim
 echo "=== Installing Vim ==="
 install_packages vim
@@ -251,7 +327,9 @@ install_packages curl wget
 echo "=== Installing ripgrep, bat, fzf, fd, zoxide, and delta ==="
 case "$PKG_MANAGER" in
     apt)
-        install_packages ripgrep bat fzf fd-find git-delta
+        install_packages ripgrep bat fzf fd-find
+        # Install delta from .deb file
+        install_delta_deb
         # Install zoxide for apt-based systems
         if ! command -v zoxide &>/dev/null; then
             echo "Installing zoxide..."
