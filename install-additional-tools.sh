@@ -289,6 +289,26 @@ if [ "$ALIAS_ADDED" = false ]; then
     echo "Note: rg alias not added (ripgrep command is already available as 'rg')"
 fi
 
+# Add fzf setup to bashrc using eval "$(fzf --bash)"
+echo "=== Adding fzf setup to bashrc using eval \"\$(fzf --bash)\" ==="
+FZF_SETUP_ADDED=false
+
+for bashrc in "${BASHRC_FILES[@]}"; do
+    if [ -f "$bashrc" ]; then
+        if ! grep -q "eval \"\$(fzf --bash)\"" "$bashrc" 2>/dev/null; then
+            echo "# Setup fzf" | $SUDO tee -a "$bashrc" >/dev/null || echo "# Setup fzf" >> "$bashrc" 2>/dev/null || true
+            echo "eval \"\$(fzf --bash)\"" | $SUDO tee -a "$bashrc" >/dev/null || echo "eval \"\$(fzf --bash)\"" >> "$bashrc" 2>/dev/null || true
+            FZF_SETUP_ADDED=true
+            echo "Added fzf setup to $bashrc using eval \"\$(fzf --bash)\""
+        fi
+        break
+    fi
+done
+
+if [ "$FZF_SETUP_ADDED" = false ]; then
+    echo "Note: fzf setup already present in bashrc"
+fi
+
 echo ""
 echo "============================================"
 echo "=== Additional Tools Installation Complete! ==="
