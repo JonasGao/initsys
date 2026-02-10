@@ -36,8 +36,8 @@ get_latest_delta_version() {
     fi
 
     local version
-    # Use Python for more robust JSON parsing
-    version=$(echo "$response" | python3 -c "import json, sys; print(json.load(sys.stdin)['tag_name'].lstrip('v'))" 2>/dev/null || true)
+    # Use jq for robust JSON parsing
+    version=$(echo "$response" | jq -r '.tag_name | ltrimstr("v")' 2>/dev/null || true)
 
     if [ -z "$version" ]; then
         echo "Warning: Could not parse latest delta version from GitHub API response. Falling back to v${default_version}." >&2
@@ -114,8 +114,8 @@ get_latest_fzf_version() {
     fi
 
     local version
-    # Use Python for more robust JSON parsing
-    version=$(echo "$response" | python3 -c "import json, sys; print(json.load(sys.stdin)['tag_name'].lstrip('v'))" 2>/dev/null || true)
+    # Use jq for robust JSON parsing
+    version=$(echo "$response" | jq -r '.tag_name | ltrimstr("v")' 2>/dev/null || true)
 
     if [ -z "$version" ]; then
         echo "Warning: Could not parse latest fzf version from GitHub API response. Falling back to v${default_version}." >&2
@@ -194,7 +194,7 @@ install_fzf() {
 # Install base packages
 echo "=== Installing base packages ==="
 $SUDO apt update
-$SUDO apt install -y git fd-find bat ripgrep openssh-server openssh-client curl wget
+$SUDO apt install -y git fd-find bat ripgrep openssh-server openssh-client curl wget jq
 
 # Install neovim
 echo "=== Installing neovim ==="
