@@ -92,16 +92,16 @@ install_delta_deb() {
 
         local response
         if ! response=$(curl -fsSL "$api_url" 2>/dev/null); then
-            echo "Warning: Failed to query GitHub API for latest delta release. Falling back to v${default_version}."
+            echo "Warning: Failed to query GitHub API for latest delta release. Falling back to v${default_version}." >&2
             echo "$default_version"
             return 0
         fi
 
         local version
-        version=$(printf '%s\n' "$response" | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/' || true)
+        version=$(printf '%s\n' "$response" | jq -r '.tag_name' | sed 's/^v//' || true)
 
         if [ -z "$version" ]; then
-            echo "Warning: Could not parse latest delta version from GitHub API response. Falling back to v${default_version}."
+            echo "Warning: Could not parse latest delta version from GitHub API response. Falling back to v${default_version}." >&2
             echo "$default_version"
         else
             echo "$version"
@@ -168,16 +168,16 @@ install_fzf() {
 
         local response
         if ! response=$(curl -fsSL "$api_url" 2>/dev/null); then
-            echo "Warning: Failed to query GitHub API for latest fzf release. Falling back to v${default_version}."
+            echo "Warning: Failed to query GitHub API for latest fzf release. Falling back to v${default_version}." >&2
             echo "$default_version"
             return 0
         fi
 
         local version
-        version=$(printf '%s\n' "$response" | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/' || true)
+        version=$(printf '%s\n' "$response" | jq -r '.tag_name' | sed 's/^v//' || true)
 
         if [ -z "$version" ]; then
-            echo "Warning: Could not parse latest fzf version from GitHub API response. Falling back to v${default_version}."
+            echo "Warning: Could not parse latest fzf version from GitHub API response. Falling back to v${default_version}." >&2
             echo "$default_version"
         else
             echo "$version"
@@ -234,9 +234,9 @@ install_fzf() {
 echo "=== Installing Vim ==="
 install_packages vim
 
-# Install curl and wget
-echo "=== Installing curl and wget ==="
-install_packages curl wget
+# Install curl, wget, and jq
+echo "=== Installing curl, wget, and jq ==="
+install_packages curl wget jq
 
 # Install additional CLI tools
 echo "=== Installing ripgrep, bat, fd, zoxide, and delta ==="
