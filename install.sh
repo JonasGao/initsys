@@ -92,6 +92,7 @@ save_config() {
     done
     echo "CONTAINER_RUNTIME=$CONTAINER_RUNTIME" >> "$config_file"
     echo "ENABLE_DOCKER=$ENABLE_DOCKER" >> "$config_file"
+    echo "DOCKER_MIRROR=${DOCKER_MIRROR:-}" >> "$config_file"
     chmod 600 "$config_file"
     echo ""
     echo "Configuration saved to: $config_file"
@@ -126,6 +127,7 @@ TRUST_CUSTOM_CA=""
 CA_URLS=()
 CONTAINER_RUNTIME=""
 ENABLE_DOCKER=""
+DOCKER_MIRROR=""
 
 # Check if config file exists
 if [ -f "$CONFIG_FILE" ]; then
@@ -207,9 +209,17 @@ else
     read -rp "Which container runtime do you want to install? (docker/podman/none): " CONTAINER_RUNTIME < /dev/tty
     CONTAINER_RUNTIME=$(echo "$CONTAINER_RUNTIME" | tr '[:upper:]' '[:lower:]')
 
-    # Docker auto-start
+    # Docker mirror and auto-start
     ENABLE_DOCKER=""
+    DOCKER_MIRROR=""
     if [ "$CONTAINER_RUNTIME" = "docker" ]; then
+        read -rp "Do you want to use Aliyun mirror for Docker installation? (y/n, default: n): " use_aliyun < /dev/tty
+        use_aliyun=$(echo "${use_aliyun:-n}" | tr '[:upper:]' '[:lower:]')
+        if [[ "$use_aliyun" =~ ^y$ ]]; then
+            DOCKER_MIRROR="aliyun"
+        else
+            DOCKER_MIRROR=""
+        fi
         read -rp "Do you want to enable Docker to start automatically on boot? (y/n): " ENABLE_DOCKER < /dev/tty
         ENABLE_DOCKER=$(echo "$ENABLE_DOCKER" | tr '[:upper:]' '[:lower:]')
     fi
@@ -262,6 +272,9 @@ if [ "$CONTAINER_RUNTIME" = "docker" ]; then
         echo "Container Runtime: Docker (auto-start enabled)"
     else
         echo "Container Runtime: Docker (auto-start disabled)"
+    fi
+    if [ "${DOCKER_MIRROR:-}" = "aliyun" ]; then
+        echo "  - Mirror: Aliyun"
     fi
 elif [ "$CONTAINER_RUNTIME" = "podman" ]; then
     echo "Container Runtime: Podman"
@@ -676,17 +689,31 @@ if [ "$CONTAINER_RUNTIME" = "podman" ]; then
         echo "Podman installed successfully."
     fi
 elif [ "$CONTAINER_RUNTIME" = "docker" ]; then
-    echo "=== Installing Docker using get.docker.com ==="
+    # Check if using Aliyun mirror
+    DOCKER_INSTALL_URL="https://get.docker.com"
+    if [ "${DOCKER_MIRROR:-}" = "aliyun" ]; then
+        echo "=== Installing Docker using Aliyun mirror ==="
+        DOCKER_INSTALL_URL="https://mirrors.aliyun.com/docker-ce/linux/static/stable/docker-install.sh"
+    else
+        echo "=== Installing Docker using get.docker.com ==="
+    fi
     DOCKER_ALREADY_INSTALLED=false
     if command -v docker &>/dev/null; then
         echo "Docker is already installed. Skipping installation."
         docker --version
         DOCKER_ALREADY_INSTALLED=true
     else
-        # Note: Docker install script is not mirrored - always download directly
-        curl -fsSL "https://get.docker.com" -o "/tmp/get-docker.sh"
-        $SUDO sh /tmp/get-docker.sh
-        rm /tmp/get-docker.sh
+        if [ "${DOCKER_MIRROR:-}" = "aliyun" ]; then
+            # Use Aliyun mirror
+            curl -fsSL "$DOCKER_INSTALL_URL" -o "/tmp/get-docker.sh"
+            # Aliyun script may need different handling
+            $SUDO sh /tmp/get-docker.sh --mirror Aliyun
+        else
+            # Official Docker install script
+            curl -fsSL "$DOCKER_INSTALL_URL" -o "/tmp/get-docker.sh"
+            $SUDO sh /tmp/get-docker.sh
+        fi
+        rm -f /tmp/get-docker.sh
     fi
     
     if [[ "$ENABLE_DOCKER" =~ ^y$ ]]; then
@@ -748,6 +775,9 @@ if [ "$CONTAINER_RUNTIME" = "docker" ]; then
         echo "Docker: installed and enabled"
     else
         echo "Docker: installed (auto-start disabled)"
+    fi
+    if [ "${DOCKER_MIRROR:-}" = "aliyun" ]; then
+        echo "  - Mirror: Aliyun"
     fi
     echo ""
     echo "Note: You may need to log out and back in for docker group changes to take effect."
