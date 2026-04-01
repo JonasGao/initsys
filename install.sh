@@ -529,7 +529,8 @@ fi
 
 # Install ZeroTier
 echo "=== Installing ZeroTier ==="
-download_file "https://install.zerotier.com" "/tmp/install-zerotier.sh"
+# Note: ZeroTier install script is not mirrored - always download directly
+curl -fsSL "https://install.zerotier.com" -o "/tmp/install-zerotier.sh"
 $SUDO bash /tmp/install-zerotier.sh
 rm /tmp/install-zerotier.sh
 
@@ -605,7 +606,8 @@ elif [ "$CONTAINER_RUNTIME" = "docker" ]; then
         docker --version
         DOCKER_ALREADY_INSTALLED=true
     else
-        download_file "https://get.docker.com" "/tmp/get-docker.sh"
+        # Note: Docker install script is not mirrored - always download directly
+        curl -fsSL "https://get.docker.com" -o "/tmp/get-docker.sh"
         $SUDO sh /tmp/get-docker.sh
         rm /tmp/get-docker.sh
     fi
