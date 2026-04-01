@@ -689,11 +689,8 @@ if [ "$CONTAINER_RUNTIME" = "podman" ]; then
         echo "Podman installed successfully."
     fi
 elif [ "$CONTAINER_RUNTIME" = "docker" ]; then
-    # Check if using Aliyun mirror
-    DOCKER_INSTALL_URL="https://get.docker.com"
     if [ "${DOCKER_MIRROR:-}" = "aliyun" ]; then
         echo "=== Installing Docker using Aliyun mirror ==="
-        DOCKER_INSTALL_URL="https://mirrors.aliyun.com/docker-ce/linux/static/stable/docker-install.sh"
     else
         echo "=== Installing Docker using get.docker.com ==="
     fi
@@ -703,14 +700,13 @@ elif [ "$CONTAINER_RUNTIME" = "docker" ]; then
         docker --version
         DOCKER_ALREADY_INSTALLED=true
     else
+        # Download from official get.docker.com
+        curl -fsSL "https://get.docker.com" -o "/tmp/get-docker.sh"
         if [ "${DOCKER_MIRROR:-}" = "aliyun" ]; then
-            # Use Aliyun mirror
-            curl -fsSL "$DOCKER_INSTALL_URL" -o "/tmp/get-docker.sh"
-            # Aliyun script may need different handling
+            # Use Aliyun mirror via script parameter
             $SUDO sh /tmp/get-docker.sh --mirror Aliyun
         else
-            # Official Docker install script
-            curl -fsSL "$DOCKER_INSTALL_URL" -o "/tmp/get-docker.sh"
+            # Official Docker install
             $SUDO sh /tmp/get-docker.sh
         fi
         rm -f /tmp/get-docker.sh
