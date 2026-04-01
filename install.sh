@@ -11,6 +11,8 @@
 # Environment variables:
 #   MIRROR_PREFIX - Prefix URL for downloading from GitHub (e.g., "https://mirror.example.com/")
 #                   This is prepended to all GitHub raw content and release URLs
+#   CONFIG_FILE   - Path to configuration file (default: ~/.initsys.conf)
+#                   If file exists, configuration is loaded from it and interactive prompts are skipped
 #
 # One-line execution:
 #   curl -fsSL https://raw.githubusercontent.com/JonasGao/initsys/main/install-openvpn-zerotier-docker.sh | bash
@@ -20,6 +22,9 @@
 #   bash install.sh
 
 set -euo pipefail
+
+# Configuration file path
+CONFIG_FILE="${CONFIG_FILE:-$HOME/.initsys.conf}"
 
 # Apply mirror prefix to URL if MIRROR_PREFIX is set
 apply_mirror() {
@@ -62,84 +67,156 @@ echo "Detected package manager: $PKG_MANAGER"
 echo ""
 
 # ============================================
+# Configuration management functions
+# ============================================
+
+# Save configuration to file
+save_config() {
+    local config_file="$1"
+    echo "# initsys configuration file" > "$config_file"
+    echo "# Generated on $(date)" >> "$config_file"
+    echo "" >> "$config_file"
+    echo "INSTALL_OPENVPN=$INSTALL_OPENVPN" >> "$config_file"
+    echo "REPLACE_PLANET=$REPLACE_PLANET" >> "$config_file"
+    echo "PLANET_SOURCE=$PLANET_SOURCE" >> "$config_file"
+    echo "JOIN_NETWORK=$JOIN_NETWORK" >> "$config_file"
+    echo "NETWORK_ID=$NETWORK_ID" >> "$config_file"
+    echo "INSTALL_NODE_EXPORTER=$INSTALL_NODE_EXPORTER" >> "$config_file"
+    echo "ENABLE_NODE_EXPORTER=$ENABLE_NODE_EXPORTER" >> "$config_file"
+    echo "TRUST_CUSTOM_CA=$TRUST_CUSTOM_CA" >> "$config_file"
+    echo "CA_URLS_COUNT=${#CA_URLS[@]}" >> "$config_file"
+    local i=0
+    for url in "${CA_URLS[@]}"; do
+        echo "CA_URL_$i=$url" >> "$config_file"
+        i=$((i + 1))
+    done
+    echo "CONTAINER_RUNTIME=$CONTAINER_RUNTIME" >> "$config_file"
+    echo "ENABLE_DOCKER=$ENABLE_DOCKER" >> "$config_file"
+    chmod 600 "$config_file"
+    echo ""
+    echo "Configuration saved to: $config_file"
+}
+
+# Load configuration from file
+load_config() {
+    local config_file="$1"
+    # shellcheck source=/dev/null
+    source "$config_file"
+    # Rebuild CA_URLS array
+    CA_URLS=()
+    for i in $(seq 0 $((CA_URLS_COUNT - 1))); do
+        local var_name="CA_URL_$i"
+        CA_URLS+=("${!var_name}")
+    done
+}
+
+# ============================================
 # Phase 1: Collect all user choices
 # ============================================
 
-echo "=== Configuration ==="
-echo ""
-
-# OpenVPN
-read -rp "Do you want to install OpenVPN? (y/n): " INSTALL_OPENVPN < /dev/tty
-INSTALL_OPENVPN=$(echo "$INSTALL_OPENVPN" | tr '[:upper:]' '[:lower:]')
-
-# ZeroTier planet file
-read -rp "Do you want to replace the ZeroTier planet file? (y/n): " REPLACE_PLANET < /dev/tty
-REPLACE_PLANET=$(echo "$REPLACE_PLANET" | tr '[:upper:]' '[:lower:]')
+# Initialize variables
+INSTALL_OPENVPN=""
+REPLACE_PLANET=""
 PLANET_SOURCE=""
-if [[ "$REPLACE_PLANET" =~ ^y$ ]]; then
-    read -rp "Enter the planet file path or URL: " PLANET_SOURCE < /dev/tty
-fi
-
-# ZeroTier network
-read -rp "Do you want to join a ZeroTier network? (y/n): " JOIN_NETWORK < /dev/tty
-JOIN_NETWORK=$(echo "$JOIN_NETWORK" | tr '[:upper:]' '[:lower:]')
+JOIN_NETWORK=""
 NETWORK_ID=""
-if [[ "$JOIN_NETWORK" =~ ^y$ ]]; then
-    read -rp "Enter the ZeroTier network ID: " NETWORK_ID < /dev/tty
-fi
-
-# Node Exporter installation
-read -rp "Do you want to install Node Exporter? (y/n): " INSTALL_NODE_EXPORTER < /dev/tty
-INSTALL_NODE_EXPORTER=$(echo "$INSTALL_NODE_EXPORTER" | tr '[:upper:]' '[:lower:]')
-
-# Node Exporter auto-start (only ask if installing)
+INSTALL_NODE_EXPORTER=""
 ENABLE_NODE_EXPORTER=""
-if [[ "$INSTALL_NODE_EXPORTER" =~ ^y$ ]]; then
-    read -rp "Do you want to enable Node Exporter to start automatically on boot? (y/n): " ENABLE_NODE_EXPORTER < /dev/tty
-    ENABLE_NODE_EXPORTER=$(echo "$ENABLE_NODE_EXPORTER" | tr '[:upper:]' '[:lower:]')
-fi
-
-# Custom CA certificates
-read -rp "Do you need to trust custom CA certificates? (y/n): " TRUST_CUSTOM_CA < /dev/tty
-TRUST_CUSTOM_CA=$(echo "$TRUST_CUSTOM_CA" | tr '[:upper:]' '[:lower:]')
+TRUST_CUSTOM_CA=""
 CA_URLS=()
-if [[ "$TRUST_CUSTOM_CA" =~ ^y$ ]]; then
-    echo "Enter CA certificate download URLs or local file paths (one per line, empty line to finish):"
-    echo "Note: Only HTTPS URLs are allowed for security. HTTP URLs will be rejected."
-    while true; do
-        read -rp "CA URL: " CA_URL < /dev/tty
-        if [ -z "$CA_URL" ]; then
-            break
-        fi
-        # Basic URL validation
-        if [[ "$CA_URL" =~ ^https:// ]]; then
-            CA_URLS+=("$CA_URL")
-        elif [[ "$CA_URL" =~ ^http:// ]]; then
-            echo "Warning: Insecure CA URL (http) is not allowed. Please use https:// or provide a local file path."
-        elif [ -f "$CA_URL" ]; then
-            # Accept local file paths
-            CA_URLS+=("$CA_URL")
-        else
-            echo "Warning: Invalid URL format or file not found. Please enter a valid HTTPS URL or local file path."
-        fi
-    done
-    
-    # Inform user if no URLs were provided
-    if [ ${#CA_URLS[@]} -eq 0 ]; then
-        echo "No CA certificate URLs provided. Skipping CA certificate installation."
-        TRUST_CUSTOM_CA="n"
-    fi
-fi
-
-# Container runtime
-read -rp "Which container runtime do you want to install? (docker/podman/none): " CONTAINER_RUNTIME < /dev/tty
-CONTAINER_RUNTIME=$(echo "$CONTAINER_RUNTIME" | tr '[:upper:]' '[:lower:]')
-
-# Docker auto-start
+CONTAINER_RUNTIME=""
 ENABLE_DOCKER=""
-if [ "$CONTAINER_RUNTIME" = "docker" ]; then
-    read -rp "Do you want to enable Docker to start automatically on boot? (y/n): " ENABLE_DOCKER < /dev/tty
-    ENABLE_DOCKER=$(echo "$ENABLE_DOCKER" | tr '[:upper:]' '[:lower:]')
+
+# Check if config file exists
+if [ -f "$CONFIG_FILE" ]; then
+    echo "=== Loading configuration from $CONFIG_FILE ==="
+    echo ""
+    load_config "$CONFIG_FILE"
+    echo "Configuration loaded successfully."
+    echo ""
+else
+    echo "=== Configuration ==="
+    echo ""
+    echo "Note: Your choices will be saved to $CONFIG_FILE for future use."
+    echo ""
+
+    # OpenVPN
+    read -rp "Do you want to install OpenVPN? (y/n): " INSTALL_OPENVPN < /dev/tty
+    INSTALL_OPENVPN=$(echo "$INSTALL_OPENVPN" | tr '[:upper:]' '[:lower:]')
+
+    # ZeroTier planet file
+    read -rp "Do you want to replace the ZeroTier planet file? (y/n): " REPLACE_PLANET < /dev/tty
+    REPLACE_PLANET=$(echo "$REPLACE_PLANET" | tr '[:upper:]' '[:lower:]')
+    PLANET_SOURCE=""
+    if [[ "$REPLACE_PLANET" =~ ^y$ ]]; then
+        read -rp "Enter the planet file path or URL: " PLANET_SOURCE < /dev/tty
+    fi
+
+    # ZeroTier network
+    read -rp "Do you want to join a ZeroTier network? (y/n): " JOIN_NETWORK < /dev/tty
+    JOIN_NETWORK=$(echo "$JOIN_NETWORK" | tr '[:upper:]' '[:lower:]')
+    NETWORK_ID=""
+    if [[ "$JOIN_NETWORK" =~ ^y$ ]]; then
+        read -rp "Enter the ZeroTier network ID: " NETWORK_ID < /dev/tty
+    fi
+
+    # Node Exporter installation
+    read -rp "Do you want to install Node Exporter? (y/n): " INSTALL_NODE_EXPORTER < /dev/tty
+    INSTALL_NODE_EXPORTER=$(echo "$INSTALL_NODE_EXPORTER" | tr '[:upper:]' '[:lower:]')
+
+    # Node Exporter auto-start (only ask if installing)
+    ENABLE_NODE_EXPORTER=""
+    if [[ "$INSTALL_NODE_EXPORTER" =~ ^y$ ]]; then
+        read -rp "Do you want to enable Node Exporter to start automatically on boot? (y/n): " ENABLE_NODE_EXPORTER < /dev/tty
+        ENABLE_NODE_EXPORTER=$(echo "$ENABLE_NODE_EXPORTER" | tr '[:upper:]' '[:lower:]')
+    fi
+
+    # Custom CA certificates
+    read -rp "Do you need to trust custom CA certificates? (y/n): " TRUST_CUSTOM_CA < /dev/tty
+    TRUST_CUSTOM_CA=$(echo "$TRUST_CUSTOM_CA" | tr '[:upper:]' '[:lower:]')
+    CA_URLS=()
+    if [[ "$TRUST_CUSTOM_CA" =~ ^y$ ]]; then
+        echo "Enter CA certificate download URLs or local file paths (one per line, empty line to finish):"
+        echo "Note: Only HTTPS URLs are allowed for security. HTTP URLs will be rejected."
+        while true; do
+            read -rp "CA URL: " CA_URL < /dev/tty
+            if [ -z "$CA_URL" ]; then
+                break
+            fi
+            # Basic URL validation
+            if [[ "$CA_URL" =~ ^https:// ]]; then
+                CA_URLS+=("$CA_URL")
+            elif [[ "$CA_URL" =~ ^http:// ]]; then
+                echo "Warning: Insecure CA URL (http) is not allowed. Please use https:// or provide a local file path."
+            elif [ -f "$CA_URL" ]; then
+                # Accept local file paths
+                CA_URLS+=("$CA_URL")
+            else
+                echo "Warning: Invalid URL format or file not found. Please enter a valid HTTPS URL or local file path."
+            fi
+        done
+
+        # Inform user if no URLs were provided
+        if [ ${#CA_URLS[@]} -eq 0 ]; then
+            echo "No CA certificate URLs provided. Skipping CA certificate installation."
+            TRUST_CUSTOM_CA="n"
+        fi
+    fi
+
+    # Container runtime
+    read -rp "Which container runtime do you want to install? (docker/podman/none): " CONTAINER_RUNTIME < /dev/tty
+    CONTAINER_RUNTIME=$(echo "$CONTAINER_RUNTIME" | tr '[:upper:]' '[:lower:]')
+
+    # Docker auto-start
+    ENABLE_DOCKER=""
+    if [ "$CONTAINER_RUNTIME" = "docker" ]; then
+        read -rp "Do you want to enable Docker to start automatically on boot? (y/n): " ENABLE_DOCKER < /dev/tty
+        ENABLE_DOCKER=$(echo "$ENABLE_DOCKER" | tr '[:upper:]' '[:lower:]')
+    fi
+
+    # Save configuration to file
+    save_config "$CONFIG_FILE"
+    echo ""
 fi
 
 # ============================================
