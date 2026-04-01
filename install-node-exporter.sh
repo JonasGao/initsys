@@ -2,6 +2,10 @@
 # One-click installation script for Node Exporter
 # Supports: Ubuntu, Debian, CentOS, Fedora (apt, dnf, yum)
 #
+# Environment variables:
+#   MIRROR_PREFIX - Prefix URL for downloading from GitHub (e.g., "https://mirror.example.com/")
+#                   This is prepended to all GitHub raw content and release URLs
+#
 # One-line execution:
 #   curl -fsSL https://raw.githubusercontent.com/JonasGao/initsys/main/install-node-exporter.sh | bash
 #
@@ -10,6 +14,16 @@
 #   bash install-node-exporter.sh
 
 set -euo pipefail
+
+# Apply mirror prefix to URL if MIRROR_PREFIX is set
+apply_mirror() {
+    local url="$1"
+    if [ -n "${MIRROR_PREFIX:-}" ]; then
+        echo "${MIRROR_PREFIX}${url}"
+    else
+        echo "$url"
+    fi
+}
 
 # Detect if running as root
 if [ "$(id -u)" -eq 0 ]; then
@@ -61,6 +75,7 @@ install_packages() {
 download_file() {
     local url="$1"
     local output="$2"
+    url=$(apply_mirror "$url")
     echo "Downloading $url ..."
     if command -v curl &>/dev/null; then
         curl -L --progress-bar "$url" -o "$output"

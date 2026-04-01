@@ -2,6 +2,10 @@
 # Install additional tools: Vim, curl, wget, ripgrep, bat, fzf, fd, zoxide, delta
 # Supports: Ubuntu, Debian, CentOS (apt, dnf, yum)
 # No interactive prompts - automatically installs all tools
+#
+# Environment variables:
+#   MIRROR_PREFIX - Prefix URL for downloading from GitHub (e.g., "https://mirror.example.com/")
+#                   This is prepended to all GitHub raw content and release URLs
 
 set -euo pipefail
 
@@ -51,10 +55,21 @@ install_packages() {
     esac
 }
 
+# Apply mirror prefix to URL if MIRROR_PREFIX is set
+apply_mirror() {
+    local url="$1"
+    if [ -n "${MIRROR_PREFIX:-}" ]; then
+        echo "${MIRROR_PREFIX}${url}"
+    else
+        echo "$url"
+    fi
+}
+
 # Download file using curl or wget
 download_file() {
     local url="$1"
     local output="$2"
+    url=$(apply_mirror "$url")
     echo "Downloading $url ..."
     if command -v curl &>/dev/null; then
         curl -L --progress-bar "$url" -o "$output"
@@ -248,7 +263,8 @@ case "$PKG_MANAGER" in
         # Install zoxide for apt-based systems
         if ! command -v zoxide &>/dev/null; then
             echo "Installing zoxide..."
-            curl -sS https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | bash
+            ZOXIDE_URL=$(apply_mirror "https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh")
+            curl -sS "$ZOXIDE_URL" | bash
         fi
         # fd-find on Debian/Ubuntu installs as fdfind, create symlink
         if command -v fdfind &>/dev/null && ! command -v fd &>/dev/null; then
@@ -260,7 +276,8 @@ case "$PKG_MANAGER" in
         # Install zoxide for dnf/yum-based systems
         if ! command -v zoxide &>/dev/null; then
             echo "Installing zoxide..."
-            curl -sS https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | bash
+            ZOXIDE_URL=$(apply_mirror "https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh")
+            curl -sS "$ZOXIDE_URL" | bash
         fi
         ;;
 esac
