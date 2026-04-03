@@ -486,7 +486,12 @@ fi
 
 # Install Node Exporter
 if [[ "$INSTALL_NODE_EXPORTER" =~ ^y$ ]]; then
-    echo "=== Installing Node Exporter ==="
+    if command -v node_exporter &>/dev/null; then
+        echo "=== Node Exporter is already installed ==="
+        node_exporter --version 2>&1 | head -1 || true
+        echo "Skipping Node Exporter installation."
+    else
+        echo "=== Installing Node Exporter ==="
     
     # Create dedicated system user for Node Exporter
     if ! id -u node_exporter &>/dev/null; then
@@ -596,33 +601,46 @@ if [[ "$INSTALL_NODE_EXPORTER" =~ ^y$ ]]; then
                     echo "Warning: Failed to start or enable Node Exporter service."
                 fi
             else
-                echo "=== Node Exporter installed but not started ==="
+            echo "=== Node Exporter installed but not started ==="
             fi
         fi
     fi
 fi
+fi
 
 # Install OpenVPN
 if [[ "$INSTALL_OPENVPN" =~ ^y$ ]]; then
-    echo "=== Installing OpenVPN ==="
-    install_packages openvpn
+    if command -v openvpn &>/dev/null; then
+        echo "=== OpenVPN is already installed ==="
+        openvpn --version 2>&1 | head -1 || true
+        echo "Skipping OpenVPN installation."
+    else
+        echo "=== Installing OpenVPN ==="
+        install_packages openvpn
 
-    echo "=== Disabling OpenVPN auto-start ==="
-    $SUDO systemctl stop openvpn || true
-    $SUDO systemctl disable openvpn || true
-    # Disable any OpenVPN instance services (openvpn@server, openvpn@client, etc.)
-    for service in $($SUDO systemctl list-units 'openvpn@*' --all --no-legend 2>/dev/null | awk '{print $1}'); do
-        $SUDO systemctl stop "$service" || true
-        $SUDO systemctl disable "$service" || true
-    done
+        echo "=== Disabling OpenVPN auto-start ==="
+        $SUDO systemctl stop openvpn || true
+        $SUDO systemctl disable openvpn || true
+        # Disable any OpenVPN instance services (openvpn@server, openvpn@client, etc.)
+        for service in $($SUDO systemctl list-units 'openvpn@*' --all --no-legend 2>/dev/null | awk '{print $1}'); do
+            $SUDO systemctl stop "$service" || true
+            $SUDO systemctl disable "$service" || true
+        done
+    fi
 fi
 
 # Install ZeroTier
-echo "=== Installing ZeroTier ==="
-# Note: ZeroTier install script is not mirrored - always download directly
-curl -fsSL "https://install.zerotier.com" -o "/tmp/install-zerotier.sh"
-$SUDO bash /tmp/install-zerotier.sh
-rm /tmp/install-zerotier.sh
+if command -v zerotier-cli &>/dev/null; then
+    echo "=== ZeroTier is already installed ==="
+    zerotier-cli --version 2>&1 || true
+    echo "Skipping ZeroTier installation."
+else
+    echo "=== Installing ZeroTier ==="
+    # Note: ZeroTier install script is not mirrored - always download directly
+    curl -fsSL "https://install.zerotier.com" -o "/tmp/install-zerotier.sh"
+    $SUDO bash /tmp/install-zerotier.sh
+    rm /tmp/install-zerotier.sh
+fi
 
 # Replace ZeroTier planet file
 if [[ "$REPLACE_PLANET" =~ ^y$ ]] && [ -n "$PLANET_SOURCE" ]; then

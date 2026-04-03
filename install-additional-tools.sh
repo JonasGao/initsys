@@ -29,6 +29,17 @@ detect_pkg_manager() {
     fi
 }
 
+# Check if command is already installed
+check_installed() {
+    local name="$1"
+    local cmd="${2:-$1}"
+    if command -v "$cmd" &>/dev/null; then
+        echo "=== $name is already installed ==="
+        return 0
+    fi
+    return 1
+}
+
 PKG_MANAGER=$(detect_pkg_manager)
 
 if [ "$PKG_MANAGER" = "unknown" ]; then
@@ -246,8 +257,10 @@ install_fzf() {
 }
 
 # Install Vim
-echo "=== Installing Vim ==="
-install_packages vim
+if ! check_installed "Vim" "vim"; then
+    echo "=== Installing Vim ==="
+    install_packages vim
+fi
 
 # Install curl, wget, and jq
 echo "=== Installing curl, wget, and jq ==="
@@ -257,24 +270,52 @@ install_packages curl wget jq
 echo "=== Installing ripgrep, bat, fd, zoxide, and delta ==="
 case "$PKG_MANAGER" in
     apt)
-        install_packages ripgrep bat fd-find
-        # Install delta from .deb file
-        install_delta_deb
-        # Install zoxide for apt-based systems
-        if ! command -v zoxide &>/dev/null; then
+        # ripgrep
+        if ! check_installed "ripgrep" "rg"; then
+            install_packages ripgrep
+        fi
+        # bat
+        if ! check_installed "bat" "batcat"; then
+            install_packages bat
+        fi
+        # fd
+        if ! check_installed "fd" "fdfind"; then
+            install_packages fd-find
+            # fd-find on Debian/Ubuntu installs as fdfind, create symlink
+            if command -v fdfind &>/dev/null && ! command -v fd &>/dev/null; then
+                $SUDO ln -sf "$(which fdfind)" /usr/local/bin/fd || true
+            fi
+        fi
+        # delta
+        if ! check_installed "delta"; then
+            install_delta_deb
+        fi
+        # zoxide
+        if ! check_installed "zoxide"; then
             echo "Installing zoxide..."
             ZOXIDE_URL=$(apply_mirror "https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh")
             curl -sS "$ZOXIDE_URL" | bash
         fi
-        # fd-find on Debian/Ubuntu installs as fdfind, create symlink
-        if command -v fdfind &>/dev/null && ! command -v fd &>/dev/null; then
-            $SUDO ln -sf "$(which fdfind)" /usr/local/bin/fd || true
-        fi
         ;;
     dnf|yum)
-        install_packages ripgrep bat fd-find git-delta
-        # Install zoxide for dnf/yum-based systems
-        if ! command -v zoxide &>/dev/null; then
+        # ripgrep
+        if ! check_installed "ripgrep" "rg"; then
+            install_packages ripgrep
+        fi
+        # bat
+        if ! check_installed "bat" "bat"; then
+            install_packages bat
+        fi
+        # fd
+        if ! check_installed "fd" "fd"; then
+            install_packages fd-find
+        fi
+        # delta
+        if ! check_installed "delta"; then
+            install_packages git-delta
+        fi
+        # zoxide
+        if ! check_installed "zoxide"; then
             echo "Installing zoxide..."
             ZOXIDE_URL=$(apply_mirror "https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh")
             curl -sS "$ZOXIDE_URL" | bash
@@ -283,7 +324,9 @@ case "$PKG_MANAGER" in
 esac
 
 # Install fzf from GitHub release
-install_fzf
+if ! check_installed "fzf"; then
+    install_fzf
+fi
 
 # Configure ripgrep alias in bash_aliases
 echo "=== Configuring ripgrep alias in bash_aliases ==="
